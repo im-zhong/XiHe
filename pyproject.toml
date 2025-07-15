@@ -4,4 +4,29 @@ version = "0.1.0"
 description = "Instruct-XiHe 120M, My First LLM."
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "datasets>=4.0.0",
+    "evaluate>=0.4.5",
+    "huggingface-hub[cli]>=0.33.4",
+    "ipykernel>=6.29.5",
+    "ipywidgets>=8.1.7",
+    "torch==2.7.1",
+    "torchvision==0.22.1",
+    "transformers>=4.53.2",
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+# https://discuss.pytorch.org/t/which-cuda-version-to-choose-when-installing-pytorch/217257
+# cu12.6现在是pytroch的默认cuda版本，比较稳定比较好
+# cu12.8，除非你有50系的GPU，必须用12.8，否则还是别用了
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cu126", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+torchvision = [
+    { index = "pytorch-cu126", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
