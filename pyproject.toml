@@ -15,9 +15,10 @@ dependencies = [
     "transformers>=4.53.2",
 ]
 
+# 现在服务器上的nvidia驱动版本比较低，先这样将就着吧，等代码写完了，升级一下驱动就好了
 [[tool.uv.index]]
-name = "pytorch-cu126"
-url = "https://download.pytorch.org/whl/cu126"
+name = "pytorch-cu118"
+url = "https://download.pytorch.org/whl/cu118"
 explicit = true
 
 # https://discuss.pytorch.org/t/which-cuda-version-to-choose-when-installing-pytorch/217257
@@ -25,8 +26,8 @@ explicit = true
 # cu12.8，除非你有50系的GPU，必须用12.8，否则还是别用了
 [tool.uv.sources]
 torch = [
-    { index = "pytorch-cu126", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+    { index = "pytorch-cu118", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 torchvision = [
-    { index = "pytorch-cu126", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+    { index = "pytorch-cu118", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
