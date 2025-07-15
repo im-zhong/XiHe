@@ -1,0 +1,7 @@
+[project]
+name = "xihe"
+version = "0.1.0"
+description = "Instruct-XiHe 120M, My First LLM."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
