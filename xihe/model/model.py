@@ -246,6 +246,7 @@ class MultiHeadSelfAttention(nn.Module):
         # 多头的本质就是每个头都独立运算，就是hidden_size就是一个头一样，所有的head_dim的处理都应该和hidden_size一样
         # 1.	RoPE 只作用于 Q 和 K，不作用于 V。
         # 2.	head_dim 必须是 偶数，因为我们每两个维度为一对做旋转。
+        # TODO: 改成和llama一样，在transpose之前apply RoPE
         if rope is not None:
             query = rope.apply_rope(query)
             key = rope.apply_rope(key)
