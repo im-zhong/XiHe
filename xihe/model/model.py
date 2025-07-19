@@ -50,7 +50,7 @@ class RMSNorm(nn.Module):
 # 然后再做矩阵乘法的时候，也可以用bmm来做，然后再做reshape就行了
 # 这样的实现肯定是更加高效的
 class RotaryPositionalEmbedding:
-    def __init__(self, dim: int, max_seq_len: int):
+    def __init__(self, dim: int, max_seq_len: int) -> None:
         # dim: 维度
         # max_seq_len: 最大序列长度
         # 这个类的作用是计算RoPE中的R矩阵
@@ -60,37 +60,57 @@ class RotaryPositionalEmbedding:
 
         # 计算R矩阵
         # shape = (max_seq_len, dim // 2, 2, 2)
-        self.R_matrix = self.calculate_R_matrix(dim, max_seq_len)
+        self.cos_threa, self.sin_threa = self.calculate_R_matrix(dim, max_seq_len)
 
     # TODO
     # 卧槽，忘了，还需要设置dtype，因为我们想要使用bfloat16
-
-    def calculate_R_matrix(self, dim: int, max_seq_len: int) -> Tensor:
+    # 我们不需要计算出整个矩阵，只需要计算出一个cos 一个sin的矩阵就行了
+    # 维度是 max_seq_len, dim // 2
+    def calculate_R_matrix(
+        self, dim: int, max_seq_len: int, base_freq: float = 10000
+    ) -> tuple[Tensor, Tensor]:
         if dim % 2 != 0:
             raise ValueError(f"dim {dim} must be even to apply RoPE!")
-        d = dim // 2
+        # d = dim // 2
         # 计算旋转矩阵
         # dim: 维度
         # max_seq_len: 最大序列长度
         # 返回一个形状为 (max_seq_len, dim) 的张量
         # 这个张量的每一行都是一个2x2的旋转矩阵
-        rotary_matrices = torch.zeros(max_seq_len, d, 2, 2)
-        # 先把串行的写出来吧
-        # 再看看怎么改成并行的
-        # TODO: 确认一下是不是从1开始的
-        for pos in range(1, max_seq_len + 1):
-            indices = torch.arange(0, d)  # shape = (d,)
-            theta = pos / 10000 ** (2 * indices / d)
-            cos_theta = torch.cos(theta)
-            sin_theta = torch.sin(theta)  # shape = (d,)
-            rotary_matrices[pos - 1, :, 0, 0] = cos_theta
-            rotary_matrices[pos - 1, :, 0, 1] = -sin_theta
-            rotary_matrices[pos - 1, :, 1, 0] = sin_theta
-            rotary_matrices[pos - 1, :, 1, 1] = cos_theta
+        # rotary_matrices = torch.zeros(max_seq_len, d, 2, 2)
+        # # 先把串行的写出来吧
+        # # 再看看怎么改成并行的
+        # # TODO: 确认一下是不是从1开始的
+        # Llama代码里面是从0开始的
+        # for pos in range(1, max_seq_len + 1):
+        #     indices = torch.arange(0, d)  # shape = (d,)
+        #     theta = pos / 10000 ** (2 * indices / d)
+        #     cos_theta = torch.cos(theta)
+        #     sin_theta = torch.sin(theta)  # shape = (d,)
+        #     rotary_matrices[pos - 1, :, 0, 0] = cos_theta
+        #     rotary_matrices[pos - 1, :, 0, 1] = -sin_theta
+        #     rotary_matrices[pos - 1, :, 1, 0] = sin_theta
+        #     rotary_matrices[pos - 1, :, 1, 1] = cos_theta
 
-        return rotary_matrices
+        # return rotary_matrices
+
+        freqs: Tensor = 1.0 / (base_freq ** (2.0 * torch.arange(0, dim // 2) / dim))
+        pos: Tensor = torch.arange(0, max_seq_len)
+        theta = torch.outer(pos, freqs)  # shape = (max_seq_len, dim // 2)
+        cos_theta = torch.cos(theta)
+        sin_theta = torch.sin(theta)  # shape = (max_seq_len, dim //
+        # 我们在内存上组织成和ploar 函数一样的吧
+        # 就是shape变成 (max_seq_len, dim // 2, 2)
+        # 里面的2 就是 cos, sin 这样的顺序
+        # 不方便，我还是不stack起来了
+        # 就直接返回cos 和sin吧
+        # rotary_matrices = torch.stack([cos_theta, sin_theta], dim=-1)
+        # assert rotary_matrices.shape == (max_seq_len, dim // 2, 2)
+        # return rotary_matrices
+        return cos_theta, sin_theta
 
     # 然后就是传入一个tensor，我们对其应用rotary positional embedding
+    # 我们也不取长度了
     def apply_rope(self, tensor: Tensor) -> Tensor:
         # 传入的tensor和返回的tensor的shape必须是一样的
         # 我们不在呼tensor的shape
@@ -98,6 +118,7 @@ class RotaryPositionalEmbedding:
 
         # 不对！我们还需要position
         # 所以
+        batch_size, num_heads, seq_len, head_dim = tensor.shape
         seq_len: int = tensor.shape[-2]
         # 还要保证传入的seq_len不能超过max_seq_len
         if seq_len > self.max_seq_len:
@@ -115,21 +136,36 @@ class RotaryPositionalEmbedding:
         if dim % 2 != 0:
             raise ValueError(f"dim {dim} must be even to apply RoPE!")
 
-        x = tensor.view(-1, seq_len, dim)  # 保证tensor是三维的
-        x = x.view(-1, seq_len, dim // 2, 2)  # shape = (batch_size, seq_len, d, 2)
-        x = x.unsqueeze(-1)  # shape = (batch_size, seq_len, d, 2, 1)
-        # 我们只需要取rotary matrix中前seq_len就够了
-        # shape = (seq_len, dim // 2, 2, 2)
-        rotary_matrices = self.R_matrix[:seq_len, :, :, :].to(tensor.device)
-        rotary_matrices = rotary_matrices.unsqueeze(0)  # shape = (1, seq_len, d, 2, 2)
-        rotary_matrices = rotary_matrices.expand_as(x)
+        # x = tensor.view(-1, seq_len, dim)  # 保证tensor是三维的
+        # x = x.view(-1, seq_len, dim // 2, 2)  # shape = (batch_size, seq_len, d, 2)
+        # x = x.unsqueeze(-1)  # shape = (batch_size, seq_len, d, 2, 1)
+        # # 我们只需要取rotary matrix中前seq_len就够了
+        # # shape = (seq_len, dim // 2, 2, 2)
+        # rotary_matrices = self.rotary_matrices[:seq_len, :, :, :].to(tensor.device)
+        # rotary_matrices = rotary_matrices.unsqueeze(0)  # shape = (1, seq_len, d, 2, 2)
+        # rotary_matrices = rotary_matrices.expand(x.shape[0], -1, -1, -1, -1)
 
-        # 然后全部都
-        # 没法直接用bmm，需要reshape一下
-        output = torch.bmm(
-            rotary_matrices.view(-1, 2, 2), x.view(-1, 2, 1)
-        )  # shape = (batch_size, seq_len, d, 2)
-        output = output.view(tensor.shape)
+        # # 然后全部都
+        # # 没法直接用bmm，需要reshape一下
+        # output = torch.bmm(
+        #     rotary_matrices.reshape(-1, 2, 2), x.view(-1, 2, 1)
+        # )  # shape = (batch_size, seq_len, d, 2)
+        # output = output.view(tensor.shape)
+
+        x = tensor.view(*tensor.shape[:-1], head_dim // 2, 2)
+        # x.shape = (*, head_dim//2, 2)
+        # cos 和 sin 需要做broadcast
+        # TIPs: 这里想做broadcast 必须对输入向量的shape进行规定
+
+        cos = self.cos_threa.view(1, 1, seq_len, head_dim // 2)
+        sin = self.sin_threa.view(1, 1, seq_len, head_dim // 2)
+        # rotate
+        x0 = x[..., 0] * cos - x[..., 1] * sin
+        x1 = x[..., 0] * sin + x[..., 1] * cos
+        # x0, x1 shape = (*, head_dim//2)
+        # 然后再concat起来
+        output = torch.stack([x0, x1], dim=-1).flatten(start_dim=-2)
+        assert output.shape == tensor.shape
         return output
 
 
