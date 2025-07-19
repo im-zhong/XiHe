@@ -1,10 +1,11 @@
 # 2025/7/19
 # zhangzhong
 
-from xihe.model import RotaryPositionalEmbedding
+from xihe.model import RotaryPositionalEmbedding, Transformer
 import torch
 from torch import Tensor, nn
 from typing import Tuple
+from xihe.model import RMSNorm as MyRMSNorm
 
 
 # code from llama
@@ -186,3 +187,51 @@ def test_rope() -> None:
     # 牛逼！过测试啦！！！
     assert torch.allclose(rotated_tensor1, xqq_out, atol=1e-5)
     assert torch.allclose(rotated_tensor2, xkk_out, atol=1e-5)
+
+
+def test_rms_norm() -> None:
+    # 这个函数是用来测试 rms_norm 的
+    # 我们需要一个张量
+    x = torch.randn(size=(4, 8, 128, 64))
+    # 然后我们计算它的 RMS
+    rms = nn.RMSNorm(normalized_shape=x.shape[-1])
+    rms.weight = nn.Parameter(torch.randn_like(rms.weight))  # 确保权重是1
+    output = rms(x)
+    # 验证输出形状
+    assert output.shape == x.shape
+
+    # 验证 RMS 是否正确
+    myrms = MyRMSNorm(normalized_shape=x.shape[-1])
+    myrms.scale = rms.weight
+    my_output = myrms(x)
+    # 验证输出形状
+    assert my_output.shape == x.shape
+
+    # 验证输出是否相等
+    assert torch.allclose(output, my_output, atol=1e-5)
+
+
+def test_transformer() -> None:
+    vocab_size = 1024
+    hidden_size = 128
+    num_layers = 2
+    num_heads = 4
+    intermediate_size = hidden_size * 4
+    max_seq_len = 512
+
+    transformer = Transformer(
+        vocab_size=vocab_size,
+        hidden_size=hidden_size,
+        num_layers=num_layers,
+        num_heads=num_heads,
+        intermediate_size=intermediate_size,
+        max_seq_len=max_seq_len,
+    )
+
+    # 测试输入
+    batch_size = 32
+    tokens = torch.randint(low=0, high=vocab_size, size=(batch_size, max_seq_len))
+    output: Tensor = transformer(tokens)
+    # 验证输出形状
+    assert output.shape == (batch_size, max_seq_len, vocab_size)
+    assert not torch.any(torch.isnan(output))

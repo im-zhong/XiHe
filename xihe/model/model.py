@@ -352,7 +352,7 @@ class Transformer(nn.Module):
         self.max_seq_len = max_seq_len
 
         self.token_embedding = nn.Embedding(vocab_size, hidden_size)
-        self.rope = RotaryPositionalEmbedding(hidden_size, max_seq_len)
+        self.rope = RotaryPositionalEmbedding(hidden_size // num_heads, max_seq_len)
 
         self.layers = nn.ModuleList(
             [
@@ -387,9 +387,13 @@ class Transformer(nn.Module):
         # 先做token embedding
         x = self.token_embedding(tokens)
         # 过layers
-        h = self.layers(x, rope=self.rope, attention_mask=None)
+        # 不能直接这么过
+
+        # h = self.layers(x, rope=self.rope)
+        for layer in self.layers:
+            x = layer(x, rope=self.rope)
         # output
         # llama还在模型的最后一层加了一个输出层
-        output = self.output(self.norm(h))
+        output = self.output(self.norm(x))
         # output: [batch_size, seq_len, vocab_size]
         return output
