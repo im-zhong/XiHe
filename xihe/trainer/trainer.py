@@ -28,18 +28,19 @@ def cosine_scheduler_with_warmup(
     return lr_lambda
 
 
-lr_scheduler = LambdaLR(
-    optimizer=AdamW(...),
-    lr_lambda=cosine_scheduler_with_warmup(
-        warmup_steps=2000,
-        total_steps=200000,
-        initial_lr=5e-5,
-        max_lr=1e-4,
-        final_lr=1e-5,
-    ),
-)
+# lr_scheduler = LambdaLR(
+#     optimizer=AdamW(...),
+#     lr_lambda=cosine_scheduler_with_warmup(
+#         warmup_steps=2000,
+#         total_steps=200000,
+#         initial_lr=5e-5,
+#         max_lr=1e-4,
+#         final_lr=1e-5,
+#     ),
+# )
 
 
+# TODO: 更名为 CausalLLMTrainer or GPTTrainer
 class TransformerTrainer:
     def __init__(
         self,
@@ -59,6 +60,8 @@ class TransformerTrainer:
         self.device = device
         self.loss_fn = torch.nn.CrossEntropyLoss()
 
+    # TODO: 我们应该先把trainer给跑起来，在上这些东西
+    # https://docs.pytorch.org/docs/stable/amp.html
     def train(self):
         self.model.train()
         for step, batch in enumerate(self.dataloader):

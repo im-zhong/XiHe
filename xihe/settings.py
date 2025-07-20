@@ -22,38 +22,109 @@
 import tomllib
 
 from pydantic import BaseModel, Field
+from pathlib import Path
+from typing import Any
+
+
+# 这个不能叫做ModelConfig
+# 我们还有TrainerConfig
+# EvalConfig 等等的东西
+# 还有就是这个东西
+from pydantic import BaseModel, Field
+from typing import Literal
+
+
+class PathConfig(BaseModel):
+    cache_dir: Path = Field(
+        default=Path("./cache"),
+        description="Directory to store cached datasets and models.",
+    )
+    checkpoint_dir: Path = Field(
+        default=Path("./checkpoints"),
+        description="Directory to save model checkpoints.",
+    )
+
+
+# 现在看起来也没有必要定义那个枚举了
+class DatasetConfig(BaseModel):
+    name: str = Field(..., description="Name of the dataset.")
+    path: str = Field(..., description="Path to the dataset.")
+    split: str = Field(..., description="Dataset split =")
+    num_epochs: int = Field(..., description="Number of epochs for training.")
+    to_iterable: bool = Field(
+        True,
+        description="Whether to convert the dataset to an iterable format.",
+    )
+
+
+class DataLoaderConfig(BaseModel):
+    batch_size: int = Field(..., description="Batch size for the DataLoader.")
+    sampling_probabilities: list[float] | None = Field(
+        None,
+        description="Sampling probabilities for datasets. If None, will be calculated based on dataset sizes.",
+    )
+    datasets: list[DatasetConfig] = Field(
+        ...,
+        description="List of datasets to be used in the DataLoader.",
+    )
+
+
+class TokenizerConfig(BaseModel):
+    tokenizer_name: str = Field(..., description="The name or path of the tokenizer.")
+    vocab_size: int = Field(..., description="Size of the tokenizer vocabulary.")
 
 
 class ModelConfig(BaseModel):
-    model_name: str = Field(..., description="The name of the model to be used.")
-    tokenizer_path: str = Field(..., description="Path to the tokenizer files.")
-    checkpoint_path: str = Field(..., description="Path to save the model checkpoints.")
-    max_length: int = Field(512, description="Maximum length of input sequences.")
-    batch_size: int = Field(32, description="Batch size for training.")
-    learning_rate: float = Field(5e-5, description="Learning rate for the optimizer.")
-    num_epochs: int = Field(3, description="Number of epochs for training.")
+    model_name: str = Field(..., description="Name of the model.")
+    context_length: int = Field(
+        ..., description="Maximum context length for the model."
+    )
+    num_layers: int = Field(..., description="Number of transformer layers.")
+    hidden_size: int = Field(..., description="Hidden size of transformer layers.")
+    num_heads: int = Field(..., description="Number of attention heads.")
+    intermediate_size: int = Field(
+        ..., description="Size of the intermediate (feed-forward) layers."
+    )
+
+
+class TrainerConfig(BaseModel):
+    checkpoint_dir: str = Field(..., description="Directory to save checkpoints.")
+    batch_size: int = Field(..., description="Training batch size.")
     warmup_steps: int = Field(
-        2000, description="Number of warmup steps for learning rate scheduling."
+        ..., description="Number of warmup steps for LR scheduling."
     )
-    weight_decay: float = Field(0.01, description="Weight decay for the optimizer.")
-    logging_steps: int = Field(100, description="Number of steps between logging.")
-    save_steps: int = Field(
-        500, description="Number of steps between saving checkpoints."
-    )
-    max_steps: int = Field(200000, description="Maximum number of training steps.")
-
-    num_layers: int = Field(12, description="Number of layers in the model.")
-    hidden_size: int = Field(768, description="Size of the hidden layers.")
-    num_heads: int = Field(12, description="Number of attention heads in the model.")
-    intermediate_size: int = Field(3072, description="Size of the intermediate layers.")
-    vocab_size: int = Field(32000, description="Size of the vocabulary.")
-    grad_clip: float = Field(
-        1.0,
-        description="Maximum norm for gradient clipping to prevent exploding gradients.",
-    )
+    total_steps: int = Field(..., description="Total number of training steps.")
 
 
-def load_config(file_path: str) -> ModelConfig:
+class OptimizerConfig(BaseModel):
+    optimizer_name: Literal["AdamW"] = Field(
+        ..., description="Name of the optimizer. Currently only 'AdamW' is supported."
+    )
+    initial_lr: float = Field(
+        ..., description="Initial learning rate at training start."
+    )
+    max_lr: float = Field(..., description="Peak learning rate during cosine schedule.")
+    final_lr: float = Field(..., description="Final learning rate after cosine decay.")
+    weight_decay: float = Field(..., description="Weight decay coefficient.")
+    max_grad_norm: float = Field(..., description="Maximum norm for gradient clipping.")
+
+
+class Config(BaseModel):
+    model: ModelConfig = Field(..., description="Model configuration.")
+    tokenizer: TokenizerConfig = Field(..., description="Tokenizer configuration.")
+    trainer: TrainerConfig = Field(..., description="Trainer configuration.")
+    optimizer: OptimizerConfig = Field(..., description="Optimizer configuration.")
+    dataloader: DataLoaderConfig = Field(
+        ...,
+        description="DataLoader configuration, including datasets and sampling probabilities.",
+    )
+    path: PathConfig = Field(
+        default=PathConfig(),
+        description="Paths for cache, checkpoints, and other resources.",
+    )
+
+
+def load_config(conf_file: Path) -> Config:
     """
     Load the model configuration from a TOML file.
 
@@ -63,6 +134,6 @@ def load_config(file_path: str) -> ModelConfig:
     Returns:
         ModelConfig: An instance of ModelConfig with the loaded parameters.
     """
-    with open(file_path, "rb") as f:
-        config_data = tomllib.load(f)
-    return ModelConfig(**config_data)
+    with open(file=conf_file, mode="rb") as f:
+        config_data: dict[str, Any] = tomllib.load(f)
+    return Config(**config_data)

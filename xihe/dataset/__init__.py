@@ -1,7 +1,13 @@
-from .dataloader import PackingDataset, DatasetEnum, DatasetConfig
+from .dataloader import (
+    PackingDataset,
+    DatasetEnum,
+    create_dataset,
+    calculate_sampling_probabilities,
+)
 
 __all__: list[str] = [
     "PackingDataset",
     "DatasetEnum",
-    "DatasetConfig",
+    "create_dataset",
+    "calculate_sampling_probabilities",
 ]
