@@ -85,6 +85,18 @@ class ModelConfig(BaseModel):
     intermediate_size: int = Field(
         ..., description="Size of the intermediate (feed-forward) layers."
     )
+    dtype: str = Field(
+        "float32",
+        description="Data type for model parameters. Default is 'float32'.",
+    )
+    mixed_precision: bool = Field(
+        False,
+        description="Whether to use mixed precision training. Default is False.",
+    )
+    low_precision_dtype: str = Field(
+        "bfloat16",
+        description="Data type for low precision training. Default is 'bfloat16'.",
+    )
 
 
 class TrainerConfig(BaseModel):
@@ -94,6 +106,10 @@ class TrainerConfig(BaseModel):
         ..., description="Number of warmup steps for LR scheduling."
     )
     total_steps: int = Field(..., description="Total number of training steps.")
+    device: str = Field(
+        "cuda",
+        description="Device to run the training on. Default is 'cuda'.",
+    )
 
 
 class OptimizerConfig(BaseModel):

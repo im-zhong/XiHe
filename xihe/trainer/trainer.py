@@ -14,6 +14,7 @@ import torch
 import math
 from torch import Tensor
 from torch.optim import Optimizer
+from tqdm import tqdm
 
 
 # lr_scheduler = LambdaLR(
@@ -39,11 +40,19 @@ class TransformerTrainer:
         scheduler: LambdaLR,
         dataloader: DataLoader,
         device="cuda",
+        # dtype: str = "float32", 我觉得先不用这个参数吧
+        # 其实混合精度的原理我还不理解
+        # 而且我还需要弄清楚一件事情
+        # 如果optimizer之前绑定了模型的参数
+        # 然后模型又to cuda了，这样写是不是不对的？
+        # 果然是不对的，
     ):
         self.vocab_size = vocab_size
         # self.config = settings
         # Initialize model, tokenizer, optimizer, etc. based on the config
-        self.model = model.to(device)
+        # 模型需要在外部to device上
+        # self.model = model.to(device)
+        self.model = model
         # self.tokenizer = model.tokenizer
         self.optimizer = optimizer
         self.scheduler = scheduler
@@ -55,7 +64,7 @@ class TransformerTrainer:
     # https://docs.pytorch.org/docs/stable/amp.html
     def train(self):
         self.model.train()
-        for step, batch in enumerate(self.dataloader):
+        for step, batch in tqdm(enumerate(self.dataloader)):
             inputs = batch["input_ids"].to(self.device)
             # labels = batch["labels"].to(self.device)
 

@@ -50,7 +50,7 @@ class RMSNorm(nn.Module):
 # 然后再做矩阵乘法的时候，也可以用bmm来做，然后再做reshape就行了
 # 这样的实现肯定是更加高效的
 class RotaryPositionalEmbedding:
-    def __init__(self, dim: int, max_seq_len: int) -> None:
+    def __init__(self, dim: int, max_seq_len: int, device: str = "cpu") -> None:
         # dim: 维度
         # max_seq_len: 最大序列长度
         # 这个类的作用是计算RoPE中的R矩阵
@@ -60,7 +60,9 @@ class RotaryPositionalEmbedding:
 
         # 计算R矩阵
         # shape = (max_seq_len, dim // 2, 2, 2)
-        self.cos_threa, self.sin_threa = self.calculate_R_matrix(dim, max_seq_len)
+        cos_threa, sin_threa = self.calculate_R_matrix(dim, max_seq_len)
+        self.cos_threa = cos_threa.to(device)
+        self.sin_threa = sin_threa.to(device)
 
     # TODO
     # 卧槽，忘了，还需要设置dtype，因为我们想要使用bfloat16
@@ -341,6 +343,7 @@ class Transformer(nn.Module):
         num_layers: int,
         num_heads: int,
         intermediate_size: int,
+        device: str = "cpu",
         max_seq_len: int = 2048,
     ):
         super().__init__()
@@ -353,7 +356,9 @@ class Transformer(nn.Module):
         self.max_seq_len = max_seq_len
 
         self.token_embedding = nn.Embedding(vocab_size, hidden_size)
-        self.rope = RotaryPositionalEmbedding(hidden_size // num_heads, max_seq_len)
+        self.rope = RotaryPositionalEmbedding(
+            hidden_size // num_heads, max_seq_len, device=device
+        )
 
         self.layers = nn.ModuleList(
             [

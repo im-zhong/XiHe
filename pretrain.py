@@ -45,18 +45,6 @@ if __name__ == "__main__":
     # Load configuration
     config = load_config(Path(args.conf))
 
-    # # Initialize model
-    # TODO: vocab size应该是不用设置的
-    # 应该可以通过tokenizer对象来获取才对
-    model = Transformer(
-        vocab_size=config.tokenizer.vocab_size,
-        max_seq_len=config.model.context_length,
-        num_layers=config.model.num_layers,
-        hidden_size=config.model.hidden_size,
-        num_heads=config.model.num_heads,
-        intermediate_size=config.model.intermediate_size,
-    )
-
     # get tokenizer from tokenizer configs
     # 但是我们不能直接依赖TokenizerConfig这个类
     # 要写一个函数来根据配置获取tokenizer
@@ -96,6 +84,20 @@ if __name__ == "__main__":
         context_length=config.model.context_length,
     )
 
+    # # Initialize model
+    # TODO: vocab size应该是不用设置的
+    # 应该可以通过tokenizer对象来获取才对
+    model = Transformer(
+        vocab_size=config.tokenizer.vocab_size,
+        max_seq_len=config.model.context_length,
+        num_layers=config.model.num_layers,
+        hidden_size=config.model.hidden_size,
+        num_heads=config.model.num_heads,
+        intermediate_size=config.model.intermediate_size,
+        device=config.trainer.device,  # Pass the device from config
+    )
+    model = model.to(config.trainer.device)
+
     # 这里需要创建optimizer和scheduler
     optimizer: Optimizer = create_optimizer(
         name=config.optimizer.optimizer_name,
@@ -119,7 +121,8 @@ if __name__ == "__main__":
         optimizer=optimizer,
         scheduler=lr_scheduler,
         dataloader=dataloader,
-        device="cuda" if torch.cuda.is_available() else "cpu",
+        device=config.trainer.device,
+        # dtype=config.model.dtype,
     )
 
     # Start training
