@@ -13,19 +13,7 @@ from torch.optim.lr_scheduler import LambdaLR
 import torch
 import math
 from torch import Tensor
-
-
-def cosine_scheduler_with_warmup(
-    warmup_steps, total_steps, initial_lr, max_lr, final_lr
-):
-    def lr_lambda(step: int):
-        if step < warmup_steps:
-            return initial_lr + (max_lr - initial_lr) * step / warmup_steps
-        # step >= lr
-        theta: float = math.pi * (step - warmup_steps) / (total_steps - warmup_steps)
-        return final_lr + 0.5 * (max_lr - final_lr) * (1 + math.cos(theta))
-
-    return lr_lambda
+from torch.optim import Optimizer
 
 
 # lr_scheduler = LambdaLR(
@@ -44,17 +32,20 @@ def cosine_scheduler_with_warmup(
 class TransformerTrainer:
     def __init__(
         self,
+        vocab_size: int,
         model: Transformer,
-        settings: ModelConfig,
+        # settings: ModelConfig,
+        optimizer: Optimizer,
         scheduler: LambdaLR,
         dataloader: DataLoader,
         device="cuda",
     ):
-        self.config = settings
+        self.vocab_size = vocab_size
+        # self.config = settings
         # Initialize model, tokenizer, optimizer, etc. based on the config
         self.model = model.to(device)
         # self.tokenizer = model.tokenizer
-        self.optimizer = AdamW(model.parameters(), lr=settings.learning_rate)
+        self.optimizer = optimizer
         self.scheduler = scheduler
         self.dataloader = dataloader
         self.device = device
@@ -84,27 +75,27 @@ class TransformerTrainer:
             shifted_labels = labels[:, 1:].contiguous()
             # https://docs.pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html
             loss: Tensor = self.loss_fn(
-                shifted_logits.view(-1, self.config.vocab_size),
+                shifted_logits.view(-1, self.vocab_size),
                 shifted_labels.view(-1),
             )
 
             loss.backward()
 
             # Clip gradients to avoid exploding gradients
-            torch.nn.utils.clip_grad_norm_(
-                parameters=self.model.parameters(), max_norm=self.config.grad_clip
-            )
+            # torch.nn.utils.clip_grad_norm_(
+            #     parameters=self.model.parameters(), max_norm=self.config.grad_clip
+            # )
 
             self.optimizer.step()
             self.scheduler.step()
             self.optimizer.zero_grad()
 
-            if step % self.config.logging_steps == 0:
-                print(f"Step {step}, Loss: {loss.item()}")
+            # if step % self.config.logging_steps == 0:
+            #     print(f"Step {step}, Loss: {loss.item()}")
 
-            if step % self.config.save_steps == 0:
-                # Save model checkpoint
-                self.save_model()
+            # if step % self.config.save_steps == 0:
+            #     # Save model checkpoint
+            #     self.save_model()
 
     # TODO: 先不急，等SFT训练完了之后，在eval吧
     def evaluate(self):
@@ -114,7 +105,7 @@ class TransformerTrainer:
     def save_model(self):
         # Save the model and tokenizer to the specified paths
         # TODO: 如果训练中断，想要重启训练，是不是还得保存optimizer scheduelr dataloader的状态
-        torch.save(self.model.state_dict(), self.config.checkpoint_path)
+        # torch.save(self.model.state_dict(), self.config.checkpoint_path)
         pass
 
     def load_model(self):

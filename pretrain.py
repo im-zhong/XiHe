@@ -8,9 +8,14 @@
 # 必要的时候，可以提供一些额外的参数，用来覆盖config里面的配置足够了
 
 
+from torch.optim.lr_scheduler import LambdaLR
 from xihe.model import Transformer
-from xihe.settings import ModelConfig, load_config
-from xihe.trainer import TransformerTrainer
+from xihe.settings import load_config
+from xihe.trainer import (
+    TransformerTrainer,
+    create_optimizer,
+    create_cosine_lr_scheduler,
+)
 from xihe.dataset import (
     PackingDataset,
     create_dataset,
@@ -23,6 +28,7 @@ import argparse
 import torch
 from transformers import AutoTokenizer
 from transformers.tokenization_utils import PreTrainedTokenizer
+from torch.optim import Optimizer, Adam, AdamW
 
 
 def create_tokenizer(tokenizer_name: str) -> PreTrainedTokenizer:
@@ -40,6 +46,8 @@ if __name__ == "__main__":
     config = load_config(Path(args.conf))
 
     # # Initialize model
+    # TODO: vocab size应该是不用设置的
+    # 应该可以通过tokenizer对象来获取才对
     model = Transformer(
         vocab_size=config.tokenizer.vocab_size,
         max_seq_len=config.model.context_length,
@@ -83,15 +91,36 @@ if __name__ == "__main__":
         tokenizer=tokenizer,
         sampling_probabilities=sampling_probabilities,
     )
+    dataloader = dataset.to_torch_dataloader(
+        batch_size=config.dataloader.batch_size,
+        context_length=config.model.context_length,
+    )
+
+    # 这里需要创建optimizer和scheduler
+    optimizer: Optimizer = create_optimizer(
+        name=config.optimizer.optimizer_name,
+        learning_rate=config.optimizer.initial_lr,
+        weight_decay=config.optimizer.weight_decay,
+        parameters=model.parameters(),
+    )
+    lr_scheduler: LambdaLR = create_cosine_lr_scheduler(
+        optimizer=optimizer,
+        warmup_steps=config.trainer.warmup_steps,
+        total_steps=config.trainer.total_steps,
+        initial_lr=config.optimizer.initial_lr,
+        max_lr=config.optimizer.max_lr,
+        final_lr=config.optimizer.final_lr,
+    )
 
     # # Initialize the trainer
-    # trainer = TransformerTrainer(
-    #     model=model,
-    #     settings=config,
-    #     scheduler=lr_scheduler,
-    #     dataloader=dataloader,
-    #     device="cuda" if torch.cuda.is_available() else "cpu",
-    # )
+    trainer = TransformerTrainer(
+        vocab_size=config.tokenizer.vocab_size,
+        model=model,
+        optimizer=optimizer,
+        scheduler=lr_scheduler,
+        dataloader=dataloader,
+        device="cuda" if torch.cuda.is_available() else "cpu",
+    )
 
     # Start training
-    # trainer.train()
+    trainer.train()
