@@ -61,8 +61,10 @@ class RotaryPositionalEmbedding:
         # 计算R矩阵
         # shape = (max_seq_len, dim // 2, 2, 2)
         cos_threa, sin_threa = self.calculate_R_matrix(dim, max_seq_len)
-        self.cos_threa = cos_threa.to(device)
-        self.sin_threa = sin_threa.to(device)
+        # self.cos_threa = cos_threa.to(device)
+        # self.sin_threa = sin_threa.to(device)
+        self.cos_threa = cos_threa
+        self.sin_threa = sin_threa
 
     # TODO
     # 卧槽，忘了，还需要设置dtype，因为我们想要使用bfloat16
@@ -356,9 +358,7 @@ class Transformer(nn.Module):
         self.max_seq_len = max_seq_len
 
         self.token_embedding = nn.Embedding(vocab_size, hidden_size)
-        self.rope = RotaryPositionalEmbedding(
-            hidden_size // num_heads, max_seq_len, device=device
-        )
+        self.rope = RotaryPositionalEmbedding(hidden_size // num_heads, max_seq_len)
 
         self.layers = nn.ModuleList(
             [

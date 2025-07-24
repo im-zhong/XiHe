@@ -212,6 +212,8 @@ def test_rms_norm() -> None:
 
 
 def test_transformer() -> None:
+    torch.cuda.set_device(0)
+
     vocab_size = 1024
     hidden_size = 128
     num_layers = 2
