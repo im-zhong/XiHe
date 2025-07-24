@@ -40,6 +40,7 @@ class TransformerTrainer:
         optimizer: Optimizer,
         scheduler: LambdaLR,
         dataloader: DataLoader,
+        max_norm: float = 1.0,
         run: Run | None = None,
         device="cuda",
         # dtype: str = "float32", 我觉得先不用这个参数吧
@@ -61,51 +62,74 @@ class TransformerTrainer:
         self.dataloader = dataloader
         self.device = device
         self.run = run
+        self.max_norm = max_norm
         self.loss_fn = torch.nn.CrossEntropyLoss()
 
     # TODO: 我们应该先把trainer给跑起来，在上这些东西
     # https://docs.pytorch.org/docs/stable/amp.html
     def train(self):
+        # torch.amp.Scaler 需要需要保存状态呢？
+        # 还真需要保存啊
+        # 这里如果使用了DDP，应该是需要这是为对应的rank的吧
+        scaler = torch.amp.GradScaler("cuda")
+
         self.model.train()
         for step, batch in tqdm(enumerate(self.dataloader)):
+            self.optimizer.zero_grad()
+
+            # 因为咱也没有支持bfloat16的设置，所以就不进行配置了
             inputs = batch["input_ids"].to(self.device)
-            # labels = batch["labels"].to(self.device)
-
-            labels = inputs.clone()  # For simplicity, using inputs as labels
-            # labels.shape = [batch_size, seq_length]
             inputs = inputs.to(self.device)
-
-            logits = self.model(inputs)
-            # logits.shape = [batch_size, seq_length, vocab_size]
-
-            # 要在这里构造labels
-            # 要使用cross entropy loss
-            # 需要手动将logits和labels shift一下
-            # logits的最后一个不要，因为那是整个序列的预测 我们没有他的golden
-            # labels的第一个不要，因为没有对应的logits预测
-            shifted_logits = logits[:, :-1, :].contiguous()
+            labels = inputs.clone()  # For simplicity, using inputs as labels
             shifted_labels = labels[:, 1:].contiguous()
-            # https://docs.pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html
-            loss: Tensor = self.loss_fn(
-                shifted_logits.view(-1, self.vocab_size),
-                shifted_labels.view(-1),
-            )
+            # labels.shape = [batch_size, seq_length]
+            # labels = batch["labels"].to(self.device)
+            with torch.autocast(device_type="cuda", dtype=torch.float16):
+                logits = self.model(inputs)
+                # logits.shape = [batch_size, seq_length, vocab_size]
+                # 要在这里构造labels
+                # 要使用cross entropy loss
+                # 需要手动将logits和labels shift一下
+                # logits的最后一个不要，因为那是整个序列的预测 我们没有他的golden
+                # labels的第一个不要，因为没有对应的logits预测
+                shifted_logits = logits[:, :-1, :].contiguous()
+
+                # https://docs.pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html
+                loss: Tensor = self.loss_fn(
+                    shifted_logits.view(-1, self.vocab_size),
+                    shifted_labels.view(-1),
+                )
             if self.run:
                 # Log loss to wandb
                 self.run.log({"loss": loss.item()})
                 # log lr
                 self.run.log({"learning_rate": self.scheduler.get_last_lr()[0]})
 
-            loss.backward()
+            # Scales loss. Calls ``backward()`` on scaled loss to create scaled gradients.
+            scaler.scale(loss).backward()
 
+            # 我们在这里需要unscale 因为需要做clip
+            # Unscales the gradients of optimizer's assigned params in-place
+            scaler.unscale_(self.optimizer)
             # Clip gradients to avoid exploding gradients
             # torch.nn.utils.clip_grad_norm_(
             #     parameters=self.model.parameters(), max_norm=self.config.grad_clip
             # )
+            # Since the gradients of optimizer's assigned params are unscaled, clips as usual:
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.max_norm)
 
-            self.optimizer.step()
+            # ``scaler.step()`` first unscales the gradients of the optimizer's assigned parameters.
+            # If these gradients do not contain ``inf``s or ``NaN``s, optimizer.step() is then called,
+            # otherwise, optimizer.step() is skipped.
+            # self.optimizer.step()
+            scaler.step(self.optimizer)
+
+            # Updates the scale for next iteration.
+            # scaler need to update its scaling factor, because of dynamic scaling tricks
+            scaler.update()
+
+            # Update the learning rate
             self.scheduler.step()
-            self.optimizer.zero_grad()
 
             # if step % self.config.logging_steps == 0:
             #     print(f"Step {step}, Loss: {loss.item()}")

@@ -23,6 +23,7 @@ from xihe.dataset import (
 )
 from pathlib import Path
 import wandb
+from wandb.sdk.wandb_run import Run
 
 import argparse
 import torch
@@ -41,12 +42,17 @@ if __name__ == "__main__":
         "--conf", "-f", type=str, required=True, help="Path to the config file"
     )
     args = parser.parse_args()
+    # TODO: tmp set this code, if we impl ddp, should delete this
+    # ? 这设置的不是torch 创建tensor的默认设备？
+    # 这个并不是用来设置默认设备的，pytorch没有提供这个功能
+    # 这个是设置默认的cuda设备的，也就是当你指定 cuda 但是没有指定 cuda:id 的时候的默认id
+    torch.cuda.set_device(0)  # Set the default CUDA device to 0
 
     # Load configuration
     config = load_config(Path(args.conf))
     # 在这里创建wandb更好
     wandb.login()
-    run: wandb.Run = wandb.init(
+    run: Run = wandb.init(
         project="My LLM",
         config=config.model_dump(),  # Track hyperparameters and metadata
     )

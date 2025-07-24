@@ -1,6 +1,4 @@
 {
-  "python.analysis.typeCheckingMode": "standard",
-  "python.testing.pytestArgs": [
-    "-s"
-  ],
+  "python.analysis.typeCheckingMode": "basic",
+  "python.testing.pytestArgs": ["-s"]
 }
