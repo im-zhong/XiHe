@@ -1,5 +1,6 @@
-# 2025/7/19
+# 2025/7/24
 # zhangzhong
+#
 
 from xihe.model import Transformer
 from xihe.settings import ModelConfig, load_config
@@ -16,28 +17,13 @@ from torch import Tensor
 from torch.optim import Optimizer
 from tqdm import tqdm
 from wandb.sdk.wandb_run import Run
-
-
-# lr_scheduler = LambdaLR(
-#     optimizer=AdamW(...),
-#     lr_lambda=cosine_scheduler_with_warmup(
-#         warmup_steps=2000,
-#         total_steps=200000,
-#         initial_lr=5e-5,
-#         max_lr=1e-4,
-#         final_lr=1e-5,
-#     ),
-# )
-
-# 要不重写一个DistributedTrainer ?
-# 写吧，看看怎么能合到一起
-# 最终还是只需要一个，同时支持分布式合单机的
-# 分布式用来做实际的训练
-# 单机用来测试调试等
+import os
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 
 # TODO: 更名为 CausalLLMTrainer or GPTTrainer
-class TransformerTrainer:
+class DistributedGPTTrainer:
     def __init__(
         self,
         vocab_size: int,
@@ -71,13 +57,31 @@ class TransformerTrainer:
         self.max_norm = max_norm
         self.loss_fn = torch.nn.CrossEntropyLoss()
 
+    # only work with nvidia GPUs
+    def setup(self, rank: int, world_size: int):
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = "12355"
+        torch.cuda.set_device(rank)
+        # Setup distributed training environment
+        torch.distributed.init_process_group(
+            backend="nccl", rank=rank, world_size=world_size
+        )
+
+    def cleanup(self):
+        torch.distributed.destroy_process_group()
+
     # TODO: 我们应该先把trainer给跑起来，在上这些东西
     # https://docs.pytorch.org/docs/stable/amp.html
-    def train(self):
+    def train(self, rank: int, world_size: int):
+        self.setup(rank, world_size)
+
         # torch.amp.Scaler 需要需要保存状态呢？
         # 还真需要保存啊
         # 这里如果使用了DDP，应该是需要这是为对应的rank的吧
         scaler = torch.amp.GradScaler("cuda")
+
+        self.model = self.model.to(rank)
+        self.model = DDP(self.model, device_ids=[rank])
 
         self.model.train()
         for step, batch in tqdm(enumerate(self.dataloader)):
@@ -105,11 +109,16 @@ class TransformerTrainer:
                     shifted_logits.view(-1, self.vocab_size),
                     shifted_labels.view(-1),
                 )
+
+            # 因为会有多个进程，并且gradient是在backward之后才能汇总起来
+            # 所以loss只能按照rank来打印了 没法打印整体的
             if self.run:
                 # Log loss to wandb
-                self.run.log({"loss": loss.item()})
+                self.run.log({f"loss-{rank}": loss.item()})
                 # log lr
-                self.run.log({"learning_rate": self.scheduler.get_last_lr()[0]})
+                # 但是learning rate所有的进程都是一样的
+                if rank == 0:
+                    self.run.log({"learning_rate": self.scheduler.get_last_lr()[0]})
 
             # Scales loss. Calls ``backward()`` on scaled loss to create scaled gradients.
             scaler.scale(loss).backward()
@@ -117,6 +126,7 @@ class TransformerTrainer:
             # 我们在这里需要unscale 因为需要做clip
             # Unscales the gradients of optimizer's assigned params in-place
             scaler.unscale_(self.optimizer)
+
             # Clip gradients to avoid exploding gradients
             # torch.nn.utils.clip_grad_norm_(
             #     parameters=self.model.parameters(), max_norm=self.config.grad_clip
@@ -143,6 +153,8 @@ class TransformerTrainer:
             # if step % self.config.save_steps == 0:
             #     # Save model checkpoint
             #     self.save_model()
+
+        self.cleanup()
 
     # TODO: 先不急，等SFT训练完了之后，在eval吧
     def evaluate(self):

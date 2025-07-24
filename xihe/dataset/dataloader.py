@@ -20,6 +20,7 @@ from enum import StrEnum
 import multiprocessing
 from torch.utils.data import DataLoader
 from transformers.tokenization_utils import PreTrainedTokenizer
+from datasets.distributed import split_dataset_by_node
 
 
 # 一共有三个东西！
@@ -357,3 +358,14 @@ class PackingDataset:
         packed_dataset = packed_dataset.rename_column("packed_input_ids", "input_ids")
         # return packed_dataset.with_format("torch")
         return packed_dataset
+
+    def to_distributed_dataset(
+        self, batch_size, context_length, rank: int, world_size: int
+    ):
+        dataset = self.to_torch_dataset(batch_size, context_length)
+        dataset = split_dataset_by_node(
+            dataset,
+            rank=rank,
+            world_size=world_size,
+        )
+        return dataset.with_format("torch")
