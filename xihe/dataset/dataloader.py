@@ -334,3 +334,26 @@ class PackingDataset:
             dataset=packed_dataset.with_format("torch"),  # type: ignore
             batch_size=batch_size,
         )
+
+    def to_torch_dataset(self, batch_size: int, context_length: int):
+        interleaved_dataset = interleave_datasets(
+            datasets=self.datasets,  # type: ignore
+            probabilities=self.sampling_probabilities,
+            seed=42,  # 设置随机种子以确保可重复性
+            stopping_strategy="all_exhausted",  # 当所有数据集都被耗尽时停止
+        )
+
+        tokenized_dataset = interleaved_dataset.map(
+            self.tokenize, batched=True, remove_columns=["text"]
+        )
+
+        packed_dataset = tokenized_dataset.map(
+            self.pack,
+            batched=True,
+            remove_columns=["input_ids", "attention_mask"],
+            # https://huggingface.co/docs/datasets/v4.0.0/en/package_reference/main_classes#datasets.Dataset.map.fn_kwargs
+            fn_kwargs={"context_length": context_length},
+        )
+        packed_dataset = packed_dataset.rename_column("packed_input_ids", "input_ids")
+        # return packed_dataset.with_format("torch")
+        return packed_dataset

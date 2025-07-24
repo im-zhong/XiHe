@@ -9,6 +9,13 @@ from xihe.dataset import (
 )
 from typing import Any
 from transformers import AutoTokenizer
+from torch.utils.data import DataLoader, DistributedSampler
+import torch
+import os
+
+# https://github.com/huggingface/datasets/issues/5360
+# 还好搜了下，有现成的
+from datasets.distributed import split_dataset_by_node
 
 
 def test_create_dataset() -> None:
@@ -43,35 +50,86 @@ def test_calculate_sampling_probabilities() -> None:
     print(sample_probabilities)
 
 
-# def test_mixed_dataset():
-#     # Test the MixedDataset class
-#     # datasets = [
-#     #     {"name": "dataset1", "size": 1000, "num_epochs": 1},
-#     #     {"name": "dataset2", "size": 2000, "num_epochs": 2},
-#     # ]
+# 需要测试两个东西，一个是streaming + pytorch.dataset 的结合
+# 另外一个就是distributed 问了chatgpt
 
-#     # 我们得先加载dataset才行
 
-#     packing_dataset = PackingDataset(
-#         dataset_configs=[
-#             DatasetConfig(name=DatasetEnum.C4, split="train[:1024]", num_epochs=1),
-#             DatasetConfig(
-#                 name=DatasetEnum.WIKIPEDIA, split="train[:1024]", num_epochs=2
-#             ),
-#         ],
-#         tokenizer=AutoTokenizer.from_pretrained("gpt2"),
-#         sample_probabilities=[0.5, 0.5],
-#     )
+def test_distributed_sampler() -> None:
+    print("Testing DistributedSampler...", flush=True)
+    # must create process group to use distributed sampler
+    rank = 0
+    # must set the MASTER_ADDR and MASTER_PORT environment variables
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = "12355"
 
-#     batch_size = 8
-#     context_length = 1024
-#     dataloader = packing_dataset.to_torch_dataloader(
-#         batch_size=batch_size, context_length=context_length
-#     )
-#     for batch in dataloader:
-#         # assert "input_ids" in batch
-#         # assert "attention_mask" in batch
-#         # assert len(batch["input_ids"]) == 8  # Check batch size
-#         input_ids = batch["input_ids"]
-#         assert input_ids.shape == (batch_size, context_length)
-#         break  # Only test one batch for simplicity
+    # PyTorch’s distributed initialization is a blocking operation:
+    # Each process waits until all other processes in the group have joined.
+    # does every process need to call the init_process_group?
+    # 	1.	Registers the process with the collective communication backend (nccl, gloo, etc.)
+    # 	2.	Establishes communication among all processes in the group
+    # 	3.	Synchronizes group metadata, like rank, world_size, and connection info
+
+    # If even one process doesn’t call it, all others will hang waiting for it — since the group is incomplete.
+    torch.distributed.init_process_group(backend="gloo", rank=rank, world_size=1)
+    # torch.cuda.set_device(rank)
+
+    print(f"Initialized process group with rank {rank}", flush=True)
+
+    # Test the DistributedSampler with a PackingDataset
+    wikipedia: dict[str, Any] = {
+        "path": "wikimedia/wikipedia",
+        "name": "20231101.en",
+        "split": "train[:1024]",
+        # "num_epochs": 2,
+    }
+    c4: dict[str, Any] = {
+        "path": "allenai/c4",
+        "name": "en",
+        "split": "train[:1024]",
+        # "num_epochs": 1,
+    }
+
+    packing_dataset = PackingDataset(
+        datasets=[
+            create_dataset(**wikipedia),
+            create_dataset(**c4),
+        ],
+        tokenizer=AutoTokenizer.from_pretrained("gpt2"),
+        sampling_probabilities=[0.5, 0.5],
+    )
+    dataset = packing_dataset.to_torch_dataset(
+        batch_size=8,
+        context_length=1024,
+    )
+    # 为了测试，显式的设置world_size为4
+    # 卧槽！牛逼！
+    dataset = split_dataset_by_node(
+        dataset,
+        rank=rank,
+        world_size=4,
+    )
+    dataset = dataset.with_format("torch")
+    # Sampler that restricts data loading to a subset of the dataset.
+    # https://discuss.pytorch.org/t/distributedsampler/90205
+    # indices = indices[self.rank:self.total_size:self.num_replicas]
+    # It is especially useful in conjunction with torch.nn.parallel.DistributedDataParallel.
+    # and load a subset of the original dataset that is exclusive to it.
+    # num_replicas: Number of processes participating in distributed training. By default, world_size is retrieved from the current distributed group.
+    # 但是我们这里为了测试，显式的设置为4
+    # TypeError: object of type 'IterableDataset' has no len()
+    # ！！！果然是这样，所以没法用IterableDataset，
+    # 不过，DistSampler也只是让不同的进程去读不同的子集而已
+    # 只要我们的iterable dataset支持shard，也可以自己包装成一个类似的东西
+    # 就是不用这个dist sampler了
+    # sampler = DistributedSampler(dataset, num_replicas=4, rank=rank)
+    dataloader = DataLoader(
+        dataset=dataset,
+        batch_size=8,
+        # sampler=sampler,
+    )
+    for batch in dataloader:
+        input_ids = batch["input_ids"]
+        assert input_ids.shape == (8, 1024)
+        break  # Only test one batch for simplicity
+
+    torch.distributed.destroy_process_group()
