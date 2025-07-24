@@ -31,6 +31,7 @@ from transformers import AutoTokenizer
 from transformers.tokenization_utils import PreTrainedTokenizer
 from torch.optim import Optimizer, Adam, AdamW
 from torch.utils.data import DataLoader
+from xihe.settings import Config
 
 # torch.multiprocessing is a PyTorch wrapper around Python’s native multiprocessing
 import torch.multiprocessing as mp
@@ -40,20 +41,15 @@ def create_tokenizer(tokenizer_name: str) -> PreTrainedTokenizer:
     return AutoTokenizer.from_pretrained(tokenizer_name)
 
 
-def main(rank, world_size):
-    parser = argparse.ArgumentParser(description="Pretrain a Transformer model")
-    parser.add_argument(
-        "--conf", "-f", type=str, required=True, help="Path to the config file"
-    )
-    args = parser.parse_args()
+def train_from_scratch(rank, world_size, config: Config):
     # TODO: tmp set this code, if we impl ddp, should delete this
     # ? 这设置的不是torch 创建tensor的默认设备？
     # 这个并不是用来设置默认设备的，pytorch没有提供这个功能
     # 这个是设置默认的cuda设备的，也就是当你指定 cuda 但是没有指定 cuda:id 的时候的默认id
-    torch.cuda.set_device(0)  # Set the default CUDA device to 0
+    torch.cuda.set_device(rank)  # Set the default CUDA device to 0
 
     # Load configuration
-    config = load_config(Path(args.conf))
+    # config = load_config(Path(args.conf))
     # 在这里创建wandb更好
     wandb.login()
     run: Run = wandb.init(
@@ -153,12 +149,55 @@ def main(rank, world_size):
     trainer.train(rank, world_size)
 
 
+# 感觉这里传入config对象更好
+# def train_from_scratch(rank: int, world_size: int, conf: Config):
+#     pass
+
+
+# 这个传入一个checkpoint对象更好吧
+def train_from_checkpoint(rank: int, world_size: int, ckpt_dir: Path):
+    pass
+
+
+# 这样这里的代码就非常简单，就是配置 + 调用函数
+# 这样最好
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Pretrain a Transformer model")
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
+        "--conf", "-f", type=str, required=False, help="Path to the config file"
+    )
+    group.add_argument(
+        "--ckpt", "-c", type=str, required=False, help="Path to the checkpoint dir"
+    )
+    args = parser.parse_args()
+    conf_file = Path(args.conf) if args.conf else None
+    ckpt_dir = Path(args.ckpt) if args.ckpt else None
+
     world_size = torch.cuda.device_count()
     print(f"Number of GPUs available: {world_size}", flush=True)
-    mp.spawn(
-        main,
-        args=(world_size,),
-        nprocs=world_size,
-        join=True,
-    )
+
+    # 对应着两种模式，一种是从头开始train，一种是从途中开始train
+    # 要不写两个main吧，或者写两个train
+    # 一个是train_from_scratch，一个是train_from_checkpoint
+    if conf_file is not None:
+        config = load_config(conf_file)
+        mp.spawn(
+            train_from_scratch,
+            args=(world_size, config),
+            nprocs=world_size,
+            join=True,
+        )
+        # train_from_scratch(conf_file)
+    else:
+        train_from_checkpoint(ckpt_dir)
+
+    # TODO：移到train函数里面
+    # world_size = torch.cuda.device_count()
+    # print(f"Number of GPUs available: {world_size}", flush=True)
+    # mp.spawn(
+    #     main,
+    #     args=(world_size,),
+    #     nprocs=world_size,
+    #     join=True,
+    # )

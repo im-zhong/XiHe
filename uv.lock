@@ -1820,6 +1820,20 @@ wheels = [
 ]
 
 [[package]]
+name = "torchdata"
+version = "0.11.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests" },
+    { name = "torch", version = "2.7.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux' and sys_platform != 'win32'" },
+    { name = "torch", version = "2.7.1+cu118", source = { registry = "https://download.pytorch.org/whl/cu118" }, marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "urllib3" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/95/d4/af694ef718aedbe95a72760ab9ff7a6a7a44ace2d7f70c27bfeb67c5c503/torchdata-0.11.0-py3-none-any.whl", hash = "sha256:52b940fbbe0e00fb21cabddf528449d1bec5bfb0d0823b7487b15f951658ee33", size = 61968, upload-time = "2025-02-20T22:26:30.666Z" },
+]
+
+[[package]]
 name = "torchvision"
 version = "0.22.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2035,6 +2049,7 @@ dependencies = [
     { name = "pytest" },
     { name = "torch", version = "2.7.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux' and sys_platform != 'win32'" },
     { name = "torch", version = "2.7.1+cu118", source = { registry = "https://download.pytorch.org/whl/cu118" }, marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "torchdata" },
     { name = "torchvision", version = "0.22.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux' and sys_platform != 'win32'" },
     { name = "torchvision", version = "0.22.1+cu118", source = { registry = "https://download.pytorch.org/whl/cu118" }, marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     { name = "tqdm" },
@@ -2054,6 +2069,7 @@ requires-dist = [
     { name = "pytest", specifier = ">=8.4.1" },
     { name = "torch", marker = "sys_platform != 'linux' and sys_platform != 'win32'", specifier = "==2.7.1" },
     { name = "torch", marker = "sys_platform == 'linux' or sys_platform == 'win32'", specifier = "==2.7.1", index = "https://download.pytorch.org/whl/cu118" },
+    { name = "torchdata", specifier = ">=0.11.0" },
     { name = "torchvision", marker = "sys_platform != 'linux' and sys_platform != 'win32'", specifier = "==0.22.1" },
     { name = "torchvision", marker = "sys_platform == 'linux' or sys_platform == 'win32'", specifier = "==0.22.1", index = "https://download.pytorch.org/whl/cu118" },
     { name = "tqdm", specifier = ">=4.67.1" },
