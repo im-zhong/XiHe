@@ -15,6 +15,7 @@ import math
 from torch import Tensor
 from torch.optim import Optimizer
 from tqdm import tqdm
+from wandb.sdk.wandb_run import Run
 
 
 # lr_scheduler = LambdaLR(
@@ -39,6 +40,7 @@ class TransformerTrainer:
         optimizer: Optimizer,
         scheduler: LambdaLR,
         dataloader: DataLoader,
+        run: Run | None = None,
         device="cuda",
         # dtype: str = "float32", 我觉得先不用这个参数吧
         # 其实混合精度的原理我还不理解
@@ -58,6 +60,7 @@ class TransformerTrainer:
         self.scheduler = scheduler
         self.dataloader = dataloader
         self.device = device
+        self.run = run
         self.loss_fn = torch.nn.CrossEntropyLoss()
 
     # TODO: 我们应该先把trainer给跑起来，在上这些东西
@@ -87,6 +90,11 @@ class TransformerTrainer:
                 shifted_logits.view(-1, self.vocab_size),
                 shifted_labels.view(-1),
             )
+            if self.run:
+                # Log loss to wandb
+                self.run.log({"loss": loss.item()})
+                # log lr
+                self.run.log({"learning_rate": self.scheduler.get_last_lr()[0]})
 
             loss.backward()
 

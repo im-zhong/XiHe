@@ -2,6 +2,20 @@
 
 My LLM.
 
+## how to use
+
+1. write your wandb api key to `.env` file, like this:
+
+   ```bash
+   WANDB_API_KEY=your_wandb_api_key
+   ```
+
+2. log in to wandb:
+
+   ```bash
+   uv run wandb login
+   ```
+
 ## TODO
 
 1. 2025/7/19
@@ -15,7 +29,7 @@ My LLM.
    2. [ ] 添加dataloader的单元测试，可能需要设置drop last batch
    3. [ ] 实现混合精度训练， amp？
    4. [ ] 适配wandb
-   5. 实现DDP
+   5. [ ] 实现DDP
    6. 实现模型保存和加载 <https://docs.pytorch.org/tutorials/beginner/saving_loading_models.html>
    7. 确定XiHe 120M 模型的各种参数
    8. 开始模型分布式训练！<https://docs.pytorch.org/tutorials/intermediate/ddp_series_minGPT.html> 又找到一个代码参考源，不过这个也是咱们写完之后对答案用吧

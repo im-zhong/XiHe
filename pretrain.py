@@ -22,7 +22,7 @@ from xihe.dataset import (
     calculate_sampling_probabilities,
 )
 from pathlib import Path
-
+import wandb
 
 import argparse
 import torch
@@ -44,6 +44,12 @@ if __name__ == "__main__":
 
     # Load configuration
     config = load_config(Path(args.conf))
+    # 在这里创建wandb更好
+    wandb.login()
+    run: wandb.Run = wandb.init(
+        project="My LLM",
+        config=config.model_dump(),  # Track hyperparameters and metadata
+    )
 
     # get tokenizer from tokenizer configs
     # 但是我们不能直接依赖TokenizerConfig这个类
@@ -123,6 +129,7 @@ if __name__ == "__main__":
         dataloader=dataloader,
         device=config.trainer.device,
         # dtype=config.model.dtype,
+        run=run,
     )
 
     # Start training

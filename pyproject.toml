@@ -17,6 +17,7 @@ dependencies = [
     "torchvision==0.22.1",
     "tqdm>=4.67.1",
     "transformers>=4.53.2",
+    "wandb>=0.21.0",
 ]
 
 # 现在服务器上的nvidia驱动版本比较低，先这样将就着吧，等代码写完了，升级一下驱动就好了
