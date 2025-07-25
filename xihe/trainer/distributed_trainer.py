@@ -19,59 +19,21 @@ from typing import Any
 
 import random
 import numpy as np
-
-
-def set_all_seeds(seed: int):
-    # Python 内置随机数
-    random.seed(seed)
-
-    # NumPy 随机数
-    np.random.seed(seed)
-
-    # PyTorch CPU
-    torch.manual_seed(seed)
-
-    # PyTorch 所有 GPU
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
-
-    # 让 cudnn 的算法结果 deterministic（可选）
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-
-
-def get_all_rng_states():
-    rng_states = {
-        "python": random.getstate(),
-        "numpy": np.random.get_state(),
-        "torch_cpu": torch.get_rng_state(),
-        "torch_cuda": torch.cuda.get_rng_state_all()
-        if torch.cuda.is_available()
-        else None,
-    }
-    return rng_states
+from .basic_trainer import BasicGPTTrainer
 
 
 # TODO: 更名为 CausalLLMTrainer or GPTTrainer
 # 把rank放在参数里面吧
 # 还有所有需要用的实例
+# TODO: 最关键的问题是怎么协调train from scratch和train from checkpoint
+#
 class DistributedGPTTrainer:
     def __init__(
         self,
-        config: Config,
-        vocab_size: int,
-        model: Transformer,
-        # settings: ModelConfig,
-        optimizer: Optimizer,
-        scheduler: LambdaLR,
-        dataloader: StatefulDataLoader,
-        grad_scaler: torch.amp.GradScaler,
-        rank: int,
+        # rank: int,
         world_size: int,
         max_norm: float = 1.0,
         run: Run | None = None,
-        device="cuda",
         # dtype: str = "float32", 我觉得先不用这个参数吧
         # 其实混合精度的原理我还不理解
         # 而且我还需要弄清楚一件事情
@@ -79,24 +41,322 @@ class DistributedGPTTrainer:
         # 然后模型又to cuda了，这样写是不是不对的？
         # 果然是不对的，
     ):
-        self.config = config
-        self.vocab_size = vocab_size
-        # self.config = settings
-        # Initialize model, tokenizer, optimizer, etc. based on the config
-        # 模型需要在外部to device上
-        # self.model = model.to(device)
-        self.model = model
-        # self.tokenizer = model.tokenizer
-        self.optimizer = optimizer
-        self.scheduler = scheduler
-        self.dataloader = dataloader
-        self.device = device
-        self.run = run
-        self.max_norm = max_norm
-        self.grad_scaler = grad_scaler
         self.rank = rank
         self.world_size = world_size
-        self.loss_fn = torch.nn.CrossEntropyLoss()
+
+    def get_state_dict(self, step: int):
+        # only rank 0 should save the checkpoint
+        # save the model, optimizer, scheduler, scaler, and config
+        # save the model state dict
+
+        # 首先gather所有的dataloader state
+        gathered_dataloader_state = None
+        if self.rank == 0:
+            gathered_dataloader_state = [None for _ in range(self.world_size)]
+        dataloader_state = self.dataloader.state_dict()
+        dist.gather_object(
+            obj=dataloader_state, object_gather_list=gathered_dataloader_state, dst=0
+        )
+
+        if self.rank != 0:
+            return
+
+        checkpoint = {
+            "model": self.model.state_dict(),
+            "optimizer": self.optimizer.state_dict(),
+            "scheduler": self.scheduler.state_dict(),
+            "grad_scaler": self.grad_scaler.state_dict(),
+            "dataloader": gathered_dataloader_state,
+            # "config": self.config.model_dump(),
+            "step": step,
+            # TODO: maybe save the random state as well
+            # 保存随机数状态是为了可复现
+            # 但是我们的系统有什么复现的必要吗
+            # 没必要，所以不保存了
+            "rngom_state": get_all_rng_states(),
+        }
+        return checkpoint
+        # save the checkpoint to a file
+        # 应该是不需要在配置里面写上路径的
+        # 需要在在.cache/checkpoint_1000.pt ?
+        # 那如果是多次训练呢？
+        # torch.save(checkpoint, self.config.checkpoint_path)
+
+    # 感觉这里传入config对象更好
+    # def train_from_scratch(rank: int, world_size: int, conf: Config):
+    #     pass
+    def train_from_scratch(rank, world_size, config: Config):
+        # TODO: tmp set this code, if we impl ddp, should delete this
+        # ? 这设置的不是torch 创建tensor的默认设备？
+        # 这个并不是用来设置默认设备的，pytorch没有提供这个功能
+        # 这个是设置默认的cuda设备的，也就是当你指定 cuda 但是没有指定 cuda:id 的时候的默认id
+        torch.cuda.set_device(rank)  # Set the default CUDA device to 0
+
+        # Load configuration
+        # config = load_config(Path(args.conf))
+        # 在这里创建wandb更好
+        wandb.login()
+        run: Run = wandb.init(
+            project="My LLM",
+            config=config.model_dump(),  # Track hyperparameters and metadata
+        )
+
+        # get tokenizer from tokenizer configs
+        # 但是我们不能直接依赖TokenizerConfig这个类
+        # 要写一个函数来根据配置获取tokenizer
+        # tokenizer = get_tokenizer(config.tokenizer)
+        tokenizer = create_tokenizer(config.tokenizer.tokenizer_name)
+
+        # 还需要设置dataset
+        # 我们使用哪些dataset，和使用多少，在datasetconfig里面写上就行了
+        datasets = [
+            create_dataset(
+                path=dataset.path,
+                name=dataset.name,
+                split=dataset.split,
+            )
+            for dataset in config.dataloader.datasets
+        ]
+
+        sampling_probabilities: list[float] = []
+        if config.dataloader.sampling_probabilities:
+            sampling_probabilities = config.dataloader.sampling_probabilities
+        else:
+            # 如果没有提供采样概率，就计算一下
+            sampling_probabilities = calculate_sampling_probabilities(
+                pathes=[dataset.path for dataset in config.dataloader.datasets],
+                names=[dataset.name for dataset in config.dataloader.datasets],
+                num_epochs=[
+                    dataset.num_epochs for dataset in config.dataloader.datasets
+                ],
+            )
+
+        # # Initialize dataset and dataloader
+        dataset = PackingDataset(
+            datasets=datasets,
+            tokenizer=tokenizer,
+            sampling_probabilities=sampling_probabilities,
+        ).to_distributed_dataset(
+            batch_size=config.dataloader.batch_size,
+            context_length=config.model.context_length,
+            rank=rank,
+            world_size=world_size,
+        )
+        dataloader = DataLoader(
+            dataset=dataset,
+            batch_size=config.dataloader.batch_size,
+            # sampler=sampler,
+        )
+
+        # # Initialize model
+        # TODO: vocab size应该是不用设置的
+        # 应该可以通过tokenizer对象来获取才对
+        model = Transformer(
+            vocab_size=config.tokenizer.vocab_size,
+            max_seq_len=config.model.context_length,
+            num_layers=config.model.num_layers,
+            hidden_size=config.model.hidden_size,
+            num_heads=config.model.num_heads,
+            intermediate_size=config.model.intermediate_size,
+            device=config.trainer.device,  # Pass the device from config
+        )
+        # model = model.to(config.trainer.device)
+
+        # 这里需要创建optimizer和scheduler
+        # TODO: 这些东西都得重写，optimizer必须在模型的参数放在正确的设备上才能创建
+        optimizer: Optimizer = create_optimizer(
+            name=config.optimizer.optimizer_name,
+            learning_rate=config.optimizer.initial_lr,
+            weight_decay=config.optimizer.weight_decay,
+            parameters=model.parameters(),
+        )
+        lr_scheduler: LambdaLR = create_cosine_lr_scheduler(
+            optimizer=optimizer,
+            warmup_steps=config.trainer.warmup_steps,
+            total_steps=config.trainer.total_steps,
+            initial_lr=config.optimizer.initial_lr,
+            max_lr=config.optimizer.max_lr,
+            final_lr=config.optimizer.final_lr,
+        )
+
+        # # Initialize the trainer
+        trainer = DistributedGPTTrainer(
+            vocab_size=config.tokenizer.vocab_size,
+            model=model,
+            optimizer=optimizer,
+            scheduler=lr_scheduler,
+            dataloader=dataloader,
+            device=config.trainer.device,
+            # dtype=config.model.dtype,
+            run=run,
+        )
+
+        # Start training
+        train(rank, world_size)
+
+    # 这个传入一个checkpoint对象更好吧
+    # 咱们先不直接写checkpoint了，先用最简单的方式把这个函数写出来
+    # 再看看能不能重构一个checkpoint出来
+    def train_from_checkpoint(rank: int, world_size: int, checkpoint: dict[str, Any]):
+        torch.cuda.set_device(rank)  # Set the default CUDA device to 0
+        wandb.login()
+
+        set_all_rng_states(checkpoint["rng_state"])
+
+        # 需要设计一种文件结构
+        # 不对啊，其实没有任何的必要
+        # 我们就全部放在一个大的dict里面就行了
+        # 这样最灵活了，所以这应该是一个file而不是一个dir
+        # checkpoint: dict[str, Any] = torch.load(ckpt_file)
+        # resume config first
+        # TODO: 这里的每一步都应该可以被测试
+        config: Config = Config(**checkpoint["config"])
+
+        tokenizer = create_tokenizer(config.tokenizer.tokenizer_name)
+
+        # then load wandb
+        run: Run = wandb.init(
+            project=config.wandb.project,
+            entity=config.wandb.entity,
+            id=config.wandb.id,
+            resume="must",
+        )
+
+        # load model
+        # define model first
+        model = Transformer(
+            vocab_size=config.tokenizer.vocab_size,
+            max_seq_len=config.model.context_length,
+            num_layers=config.model.num_layers,
+            hidden_size=config.model.hidden_size,
+            num_heads=config.model.num_heads,
+            intermediate_size=config.model.intermediate_size,
+            device=config.trainer.device,  # Pass the device from config
+        )
+        # model = checkpoint.load_model(model)
+        model.load_state_dict(checkpoint["model"])
+        model = model.to(rank)
+
+        # TODO: 这个还需要研究
+        # load dataloader
+        # 那就只需要构建dataset
+        # 生成dataloader
+        # 然后load state就行了
+
+        # 算了，我一直纠结的点在于，我想要测试load state的过程
+        # 但是这一部分也没什么好测的呀
+        datasets = [
+            create_dataset(
+                path=dataset.path,
+                name=dataset.name,
+                split=dataset.split,
+            )
+            for dataset in config.dataloader.datasets
+        ]
+
+        sampling_probabilities: list[float] = []
+        if config.dataloader.sampling_probabilities:
+            sampling_probabilities = config.dataloader.sampling_probabilities
+        else:
+            # 如果没有提供采样概率，就计算一下
+            sampling_probabilities = calculate_sampling_probabilities(
+                pathes=[dataset.path for dataset in config.dataloader.datasets],
+                names=[dataset.name for dataset in config.dataloader.datasets],
+                num_epochs=[
+                    dataset.num_epochs for dataset in config.dataloader.datasets
+                ],
+            )
+
+        # # Initialize dataset and dataloader
+        dataset = PackingDataset(
+            datasets=datasets,
+            tokenizer=tokenizer,
+            sampling_probabilities=sampling_probabilities,
+        )
+        dataloader = dataset.to_stateful_dataloader(
+            batch_size=config.dataloader.batch_size,
+            context_length=config.model.context_length,
+            rank=rank,
+            world_size=world_size,
+        )
+        # TODO: 这些特定的save和load逻辑都应该封装在一起
+        # 方便阅读理解和测试
+        dataloader.load_state_dict(checkpoint["dataloader"][rank])
+
+        grad_scaler = torch.amp.GradScaler("cuda", enabled=config.trainer.use_amp)
+        grad_scaler.load_state_dict(checkpoint["grad_scaler"])
+
+        model = model.to(rank)
+        model = DDP(model, device_ids=[rank])
+
+        # load optimizer
+        optimizer: Optimizer = create_optimizer(
+            name=config.optimizer.optimizer_name,
+            learning_rate=config.optimizer.initial_lr,
+            weight_decay=config.optimizer.weight_decay,
+            parameters=model.parameters(),
+        )
+        optimizer.load_state_dict(checkpoint["optimizer"])
+
+        # load scheduler
+        lr_scheduler: LambdaLR = create_cosine_lr_scheduler(
+            optimizer=optimizer,
+            warmup_steps=config.trainer.warmup_steps,
+            total_steps=config.trainer.total_steps,
+            initial_lr=config.optimizer.initial_lr,
+            max_lr=config.optimizer.max_lr,
+            final_lr=config.optimizer.final_lr,
+        )
+        lr_scheduler.load_state_dict(checkpoint["scheduler"])
+
+        # # Initialize the trainer
+        # TODO: 这里感觉也不是很好
+        # 模型是不是应该只加载一次？然后由DDP负责将模型复制到每个GPU上？
+        # 现在的写法，每个rank都会创建一个新的模型实例，都会加载之前的权重
+        # 然后DDP又复制了一次
+        # 不过这个点感觉消耗的时间并不多，所以先这样吧
+        trainer = DistributedGPTTrainer(
+            config=config,
+            vocab_size=config.tokenizer.vocab_size,
+            model=model,
+            optimizer=optimizer,
+            scheduler=lr_scheduler,
+            dataloader=dataloader,
+            device=config.trainer.device,
+            # dtype=config.model.dtype,
+            grad_scaler=grad_scaler,
+            rank=rank,
+            world_size=world_size,
+            run=run,
+        )
+
+        # Start training
+        train(rank, world_size)
+
+    # TODO: 感觉把这个类写出来，可以做单元测试了呀
+    # 这个类也要尽可能的包含功能，这样可以让main.py代码更少
+    def load_state_dict(self, rank: int, state_dict: dict[str, Any]):
+        set_all_rng_states(state_dict["rng_state"])
+
+        self.model.load_state_dict(state_dict["model"])
+        self.model = self.model.to(rank)
+
+        self.dataloader.load_state_dict(state_dict["dataloader"][rank])
+        self.grad_scaler.load_state_dict(state_dict["grad_scaler"])
+
+        # TODO: model = model(DDP) 这一步要放在哪里呢？
+        self.optimizer.load_state_dict(state_dict["optimizer"])
+        self.lr_scheduler.load_state_dict(state_dict["scheduler"])
+
+        pass
+
+    # TODO: 先不急，等SFT训练完了之后，在eval吧
+    def evaluate(self):
+        # Implement the evaluation logic
+        pass
+
+    def create_tokenizer(tokenizer_name: str) -> PreTrainedTokenizer:
+        return AutoTokenizer.from_pretrained(tokenizer_name)
 
     # only work with nvidia GPUs
     def setup(self, rank: int, world_size: int):
@@ -121,6 +381,8 @@ class DistributedGPTTrainer:
     # TODO: 我们应该先把trainer给跑起来，在上这些东西
     # https://docs.pytorch.org/docs/stable/amp.html
     def train(self, rank: int, world_size: int):
+        # get trainer from
+
         self.setup(rank, world_size)
 
         # torch.amp.Scaler 需要需要保存状态呢？
@@ -149,132 +411,3 @@ class DistributedGPTTrainer:
             self.save_checkpoint(step)
 
         self.cleanup()
-
-    def save_checkpoint(self, step: int):
-        # only rank 0 should save the checkpoint
-        # save the model, optimizer, scheduler, scaler, and config
-        # save the model state dict
-
-        # 首先gather所有的dataloader state
-        gathered_dataloader_state = None
-        if self.rank == 0:
-            gathered_dataloader_state = [None for _ in range(self.world_size)]
-        dataloader_state = self.dataloader.state_dict()
-        dist.gather_object(
-            obj=dataloader_state, object_gather_list=gathered_dataloader_state, dst=0
-        )
-
-        if self.rank != 0:
-            return
-
-        checkpoint = {
-            "model": self.model.state_dict(),
-            "optimizer": self.optimizer.state_dict(),
-            "scheduler": self.scheduler.state_dict(),
-            "grad_scaler": self.grad_scaler.state_dict(),
-            "dataloader": gathered_dataloader_state,
-            "config": self.config.model_dump(),
-            "step": step,
-            # TODO: maybe save the random state as well
-            # 保存随机数状态是为了可复现
-            # 但是我们的系统有什么复现的必要吗
-            # 没必要，所以不保存了
-            "rngom_state": get_all_rng_states(),
-        }
-        # save the checkpoint to a file
-        # 应该是不需要在配置里面写上路径的
-        # 需要在在.cache/checkpoint_1000.pt ?
-        # 那如果是多次训练呢？
-        torch.save(checkpoint, self.config.checkpoint_path)
-
-    # 这样是好得多！
-    def train_step(self, batch: dict[str, Tensor], scaler: torch.amp.GradScaler):
-        self.optimizer.zero_grad()
-
-        # 因为咱也没有支持bfloat16的设置，所以就不进行配置了
-        inputs = batch["input_ids"].to(self.device)
-        inputs = inputs.to(self.device)
-        labels = inputs.clone()  # For simplicity, using inputs as labels
-        shifted_labels = labels[:, 1:].contiguous()
-        # labels.shape = [batch_size, seq_length]
-        # labels = batch["labels"].to(self.device)
-        with torch.autocast(device_type="cuda", dtype=torch.float16):
-            logits = self.model(inputs)
-            # logits.shape = [batch_size, seq_length, vocab_size]
-            # 要在这里构造labels
-            # 要使用cross entropy loss
-            # 需要手动将logits和labels shift一下
-            # logits的最后一个不要，因为那是整个序列的预测 我们没有他的golden
-            # labels的第一个不要，因为没有对应的logits预测
-            shifted_logits = logits[:, :-1, :].contiguous()
-
-            # https://docs.pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html
-            loss: Tensor = self.loss_fn(
-                shifted_logits.view(-1, self.vocab_size),
-                shifted_labels.view(-1),
-            )
-
-        # 因为会有多个进程，并且gradient是在backward之后才能汇总起来
-        # 所以loss只能按照rank来打印了 没法打印整体的
-        if self.run:
-            # Log loss to wandb
-            self.run.log({f"loss-{self.rank}": loss.item()})
-            # log lr
-            # 但是learning rate所有的进程都是一样的
-            if self.rank == 0:
-                self.run.log({"learning_rate": self.scheduler.get_last_lr()[0]})
-
-        # Scales loss. Calls ``backward()`` on scaled loss to create scaled gradients.
-        scaler.scale(loss).backward()
-
-        # 我们在这里需要unscale 因为需要做clip
-        # Unscales the gradients of optimizer's assigned params in-place
-        scaler.unscale_(self.optimizer)
-
-        # Clip gradients to avoid exploding gradients
-        # torch.nn.utils.clip_grad_norm_(
-        #     parameters=self.model.parameters(), max_norm=self.config.grad_clip
-        # )
-        # Since the gradients of optimizer's assigned params are unscaled, clips as usual:
-        torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.max_norm)
-
-        # ``scaler.step()`` first unscales the gradients of the optimizer's assigned parameters.
-        # If these gradients do not contain ``inf``s or ``NaN``s, optimizer.step() is then called,
-        # otherwise, optimizer.step() is skipped.
-        # self.optimizer.step()
-        scaler.step(self.optimizer)
-
-        # Updates the scale for next iteration.
-        # scaler need to update its scaling factor, because of dynamic scaling tricks
-        scaler.update()
-
-        # Update the learning rate
-        self.scheduler.step()
-
-        # if step % self.config.logging_steps == 0:
-        #     print(f"Step {step}, Loss: {loss.item()}")
-
-        # if step % self.config.save_steps == 0:
-        #     # Save model checkpoint
-        #     self.save_model()
-
-    def get_state_dict(self) -> dict[str, Any]:
-        return {}
-
-    def load_state_dict(self, state_dict: dict[str, Any]):
-        pass
-
-    # TODO: 先不急，等SFT训练完了之后，在eval吧
-    def evaluate(self):
-        # Implement the evaluation logic
-        pass
-
-    def save_model(self):
-        # Save the model and tokenizer to the specified paths
-        # TODO: 如果训练中断，想要重启训练，是不是还得保存optimizer scheduelr dataloader的状态
-        # torch.save(self.model.state_dict(), self.config.checkpoint_path)
-        pass
-
-    def load_model(self):
-        # Load the model and tokenizer from the specified paths
-        pass
