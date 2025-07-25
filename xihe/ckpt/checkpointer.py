@@ -10,6 +10,10 @@ from pathlib import Path
 import wandb
 from wandb.sdk.wandb_run import Run
 from torchdata.stateful_dataloader import StatefulDataLoader
+from typing import Any
+
+from torch import nn
+import torch
 
 # 需要保存的东西
 # model
@@ -24,12 +28,31 @@ from torchdata.stateful_dataloader import StatefulDataLoader
 # wandb
 
 
-class Checkpointer:
+class Checkpoint:
     def __init__(self, run: Run, model: Transformer, optimizer, scheduler):
         self.run = run
         self.model = model
         self.optimizer = optimizer
         self.scheduler = scheduler
+
+    # https://docs.wandb.ai/guides/runs/resuming/
+    def load_wandb_run(
+        self,
+        id: str,
+        entity: str | None = None,
+        project: str | None = None,
+    ) -> Run:
+        # 这个entity应该是你登陆之后自己检测的
+        # 所以不需要传入的
+        return wandb.init(entity=entity, project=project, id=id, resume="must")
+
+    def load_model(self, model: nn.Module, state_dict: dict[str, Any]) -> nn.Module:
+        # 想要load就得先创建模型
+        # 但是checkpoint不应该负责创建模型
+        model.load_state_dict(state_dict)
+        return model
+    
+    
 
     def save(self, path: Path):
         state = {

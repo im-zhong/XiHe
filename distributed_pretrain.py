@@ -35,6 +35,7 @@ from xihe.settings import Config
 
 # torch.multiprocessing is a PyTorch wrapper around Python’s native multiprocessing
 import torch.multiprocessing as mp
+from typing import Any
 
 
 def create_tokenizer(tokenizer_name: str) -> PreTrainedTokenizer:
@@ -155,7 +156,88 @@ def train_from_scratch(rank, world_size, config: Config):
 
 
 # 这个传入一个checkpoint对象更好吧
-def train_from_checkpoint(rank: int, world_size: int, ckpt_dir: Path):
+# 咱们先不直接写checkpoint了，先用最简单的方式把这个函数写出来
+# 再看看能不能重构一个checkpoint出来
+def train_from_checkpoint(rank: int, world_size: int, checkpoint: dict[str, Any]):
+    torch.cuda.set_device(rank)  # Set the default CUDA device to 0
+    wandb.login()
+
+    # 需要设计一种文件结构
+    # 不对啊，其实没有任何的必要
+    # 我们就全部放在一个大的dict里面就行了
+    # 这样最灵活了，所以这应该是一个file而不是一个dir
+    # checkpoint: dict[str, Any] = torch.load(ckpt_file)
+    # resume config first
+    # TODO: 这里的每一步都应该可以被测试
+    config: Config = Config(**checkpoint["config"])
+
+    tokenizer = create_tokenizer(config.tokenizer.tokenizer_name)
+
+    # then load wandb
+    run: Run = wandb.init(
+        project=config.wandb.project,
+        entity=config.wandb.entity,
+        id=config.wandb.id,
+        resume="must",
+    )
+
+    # load model
+    # define model first
+    model = Transformer(
+        vocab_size=config.tokenizer.vocab_size,
+        max_seq_len=config.model.context_length,
+        num_layers=config.model.num_layers,
+        hidden_size=config.model.hidden_size,
+        num_heads=config.model.num_heads,
+        intermediate_size=config.model.intermediate_size,
+        device=config.trainer.device,  # Pass the device from config
+    )
+    model.load_state_dict(checkpoint["model"])
+    model = model.to(rank)
+
+    # load optimizer
+    optimizer: Optimizer = create_optimizer(
+        name=config.optimizer.optimizer_name,
+        learning_rate=config.optimizer.initial_lr,
+        weight_decay=config.optimizer.weight_decay,
+        parameters=model.parameters(),
+    )
+    optimizer.load_state_dict(checkpoint["optimizer"])
+
+    # load scheduler
+    lr_scheduler: LambdaLR = create_cosine_lr_scheduler(
+        optimizer=optimizer,
+        warmup_steps=config.trainer.warmup_steps,
+        total_steps=config.trainer.total_steps,
+        initial_lr=config.optimizer.initial_lr,
+        max_lr=config.optimizer.max_lr,
+        final_lr=config.optimizer.final_lr,
+    )
+    lr_scheduler.load_state_dict(checkpoint["scheduler"])
+
+    # TODO: 这个还需要研究
+    # load dataloader
+
+    # # Initialize the trainer
+    # TODO: 这里感觉也不是很好
+    # 模型是不是应该只加载一次？然后由DDP负责将模型复制到每个GPU上？
+    # 现在的写法，每个rank都会创建一个新的模型实例，都会加载之前的权重
+    # 然后DDP又复制了一次
+    # 不过这个点感觉消耗的时间并不多，所以先这样吧
+    trainer = DistributedGPTTrainer(
+        vocab_size=config.tokenizer.vocab_size,
+        model=model,
+        optimizer=optimizer,
+        scheduler=lr_scheduler,
+        dataloader=dataloader,
+        device=config.trainer.device,
+        # dtype=config.model.dtype,
+        run=run,
+    )
+
+    # Start training
+    trainer.train(rank, world_size)
+
     pass
 
 
@@ -190,8 +272,13 @@ if __name__ == "__main__":
         )
         # train_from_scratch(conf_file)
     else:
-        train_from_checkpoint(ckpt_dir)
-
+        checkpoint: dict[str, Any] = torch.load(ckpt_dir)
+        mp.spawn(
+            train_from_checkpoint,
+            args=(world_size, checkpoint),
+            nprocs=world_size,
+            join=True,
+        )
     # TODO：移到train函数里面
     # world_size = torch.cuda.device_count()
     # print(f"Number of GPUs available: {world_size}", flush=True)

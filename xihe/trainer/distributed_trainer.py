@@ -80,6 +80,11 @@ class DistributedGPTTrainer:
         # 这里如果使用了DDP，应该是需要这是为对应的rank的吧
         scaler = torch.amp.GradScaler("cuda")
 
+        # TODO: 这个train函数无法承担任何构造对象的过程
+        # 他只能直接从外部获取对象，然后使用
+        # 否则创建的过程就会和训练的过程耦合
+        # 现在无法实现checkpoint机制了
+        # 也就是这里的scaler和model的创建都要移动到train函数外面
         self.model = self.model.to(rank)
         self.model = DDP(self.model, device_ids=[rank])
 

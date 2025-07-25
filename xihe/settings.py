@@ -45,6 +45,12 @@ class PathConfig(BaseModel):
     )
 
 
+class WandbConfig(BaseModel):
+    entity: str | None = Field(None)
+    project: str = Field(...)
+    id: str = Field(...)
+
+
 # 现在看起来也没有必要定义那个枚举了
 class DatasetConfig(BaseModel):
     name: str = Field(..., description="Name of the dataset.")
@@ -138,6 +144,8 @@ class Config(BaseModel):
         default=PathConfig(),
         description="Paths for cache, checkpoints, and other resources.",
     )
+
+    wandb: WandbConfig
 
 
 def load_config(conf_file: Path) -> Config:
