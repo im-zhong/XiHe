@@ -12,6 +12,8 @@ from transformers import AutoTokenizer
 from torch.utils.data import DataLoader, DistributedSampler
 import torch
 import os
+from datasets import Dataset
+from torchdata.stateful_dataloader import StatefulDataLoader
 
 # https://github.com/huggingface/datasets/issues/5360
 # 还好搜了下，有现成的
@@ -133,3 +135,64 @@ def test_distributed_sampler() -> None:
         break  # Only test one batch for simplicity
 
     torch.distributed.destroy_process_group()
+
+
+# test dataloader resume
+# https://huggingface.co/docs/datasets/stream#save-a-dataset-checkpoint-and-resume-iteration
+def test_iterable_dataset_resume() -> None:
+    print("Testing dataloader resume...", flush=True)
+
+    iterable_dataset = Dataset.from_dict({"a": range(6)}).to_iterable_dataset(
+        num_shards=3
+    )
+    for idx, example in enumerate(iterable_dataset):
+        print(example)
+        if idx == 2:
+            state_dict = iterable_dataset.state_dict()
+            print("checkpoint")
+            break
+
+    iterable_dataset = Dataset.from_dict({"a": range(6)}).to_iterable_dataset(
+        num_shards=3
+    )
+    iterable_dataset.load_state_dict(state_dict)
+    print(f"restart from checkpoint")
+    for example in iterable_dataset:
+        print(example)
+    # This is a placeholder for the actual test implementation
+    # You would typically create a DataLoader and simulate a resume scenario
+    # For example, by saving the state of the DataLoader and then resuming it
+    # after some interruption.
+    pass  # Implement your test logic here
+
+
+# 全面转成iterable的dataset吧
+# 这样不需要等待数据集下完，也可以进行训练
+#
+
+
+def test_stateful_dataloader() -> None:
+    iterable_dataset = Dataset.from_dict({"a": range(64)}).to_iterable_dataset(
+        num_shards=4
+    )
+    dataloader = StatefulDataLoader(iterable_dataset, batch_size=4, num_workers=4)
+
+    state_dict: dict[str, Any] = {}
+    for idx, batch in enumerate(dataloader):
+        print(f"Batch {idx}: {batch}")
+        if idx == 3:
+            state_dict = dataloader.state_dict()
+            print("checkpoint")
+            break
+
+    dataloader = StatefulDataLoader(iterable_dataset, batch_size=4, num_workers=4)
+    dataloader.load_state_dict(state_dict)
+    print(f"restart from checkpoint")
+    for idx, batch in enumerate(dataloader):
+        print(f"Batch {idx}: {batch}")
+        if idx == 3:
+            break
+
+    # 分析一下这个输出
+    # 感觉这个stateful dataloader是可以完成我们的需求的
+    # 

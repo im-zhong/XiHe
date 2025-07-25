@@ -21,6 +21,7 @@ import multiprocessing
 from torch.utils.data import DataLoader
 from transformers.tokenization_utils import PreTrainedTokenizer
 from datasets.distributed import split_dataset_by_node
+from torchdata.stateful_dataloader import StatefulDataLoader
 
 
 # 一共有三个东西！
@@ -369,3 +370,11 @@ class PackingDataset:
             world_size=world_size,
         )
         return dataset.with_format("torch")
+
+    def to_stateful_dataloader(
+        self, batch_size: int, context_length: int, rank: int, world_size: int
+    ) -> StatefulDataLoader:
+        dataset = self.to_distributed_dataset(
+            batch_size, context_length, rank, world_size
+        )
+        return StatefulDataLoader(dataset=dataset, batch_size=batch_size)

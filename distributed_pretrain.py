@@ -217,6 +217,43 @@ def train_from_checkpoint(rank: int, world_size: int, checkpoint: dict[str, Any]
 
     # TODO: 这个还需要研究
     # load dataloader
+    # 那就只需要构建dataset
+    # 生成dataloader
+    # 然后load state就行了
+
+    datasets = [
+        create_dataset(
+            path=dataset.path,
+            name=dataset.name,
+            split=dataset.split,
+        )
+        for dataset in config.dataloader.datasets
+    ]
+
+    sampling_probabilities: list[float] = []
+    if config.dataloader.sampling_probabilities:
+        sampling_probabilities = config.dataloader.sampling_probabilities
+    else:
+        # 如果没有提供采样概率，就计算一下
+        sampling_probabilities = calculate_sampling_probabilities(
+            pathes=[dataset.path for dataset in config.dataloader.datasets],
+            names=[dataset.name for dataset in config.dataloader.datasets],
+            num_epochs=[dataset.num_epochs for dataset in config.dataloader.datasets],
+        )
+
+    # # Initialize dataset and dataloader
+    dataset = PackingDataset(
+        datasets=datasets,
+        tokenizer=tokenizer,
+        sampling_probabilities=sampling_probabilities,
+    )
+    dataloader = dataset.to_stateful_dataloader(
+        batch_size=config.dataloader.batch_size,
+        context_length=config.model.context_length,
+        rank=rank,
+        world_size=world_size,
+    )
+    dataloader.load_state_dict(checkpoint[f"dataloader-{rank}"])
 
     # # Initialize the trainer
     # TODO: 这里感觉也不是很好
