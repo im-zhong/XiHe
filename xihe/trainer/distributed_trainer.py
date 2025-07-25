@@ -3,16 +3,10 @@
 #
 
 from xihe.model import Transformer
-from xihe.settings import ModelConfig, load_config
-from torch.utils.data import DataLoader
-
-# use pytorch lambdaLR to impl custom learning rate scheduler
-from torch.optim import AdamW  # use this optimizer
 
 # https://docs.pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.LambdaLR.html
 from torch.optim.lr_scheduler import LambdaLR
 import torch
-import math
 from torch import Tensor
 from torch.optim import Optimizer
 from tqdm import tqdm
@@ -21,11 +15,10 @@ import os
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torchdata.stateful_dataloader import StatefulDataLoader
-
+from typing import Any
 
 import random
 import numpy as np
-import torch
 
 
 def set_all_seeds(seed: int):
@@ -58,7 +51,6 @@ def get_all_rng_states():
         else None,
     }
     return rng_states
-
 
 
 # TODO: 更名为 CausalLLMTrainer or GPTTrainer
@@ -119,6 +111,13 @@ class DistributedGPTTrainer:
     def cleanup(self):
         torch.distributed.destroy_process_group()
 
+    # 有一种让Trainer完全剥离ckpter的方法
+    # 就是把这个train函数写到外面 写到main文件里面
+    # 好像这样就是对的，这个类就不是DistributedTrainer了
+    # 他反而是对distributed无感的！
+    # 我们就可以在外部同时实现单进程和多进程的训练！
+    # 单进程的训练就不用实现了，但是需要进行测试
+    # 多进程的训练写在distributed_pretrain.py里面就可以了
     # TODO: 我们应该先把trainer给跑起来，在上这些东西
     # https://docs.pytorch.org/docs/stable/amp.html
     def train(self, rank: int, world_size: int):
@@ -258,6 +257,12 @@ class DistributedGPTTrainer:
         # if step % self.config.save_steps == 0:
         #     # Save model checkpoint
         #     self.save_model()
+
+    def get_state_dict(self) -> dict[str, Any]:
+        return {}
+
+    def load_state_dict(self, state_dict: dict[str, Any]):
+        pass
 
     # TODO: 先不急，等SFT训练完了之后，在eval吧
     def evaluate(self):
