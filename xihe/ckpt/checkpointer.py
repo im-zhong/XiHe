@@ -27,6 +27,8 @@ import torch
 # dataloader也需要保存，不过要怎么保存呢 https://huggingface.co/docs/datasets/stream#save-a-dataset-checkpoint-and-resume-iteration
 # wandb
 
+# TODO: ddp下多个进程需要保存的东西一样吗？需要每个进程保存自己的optimiezr,scaler吗？
+
 
 class Checkpoint:
     def __init__(self, run: Run, model: Transformer, optimizer, scheduler):
@@ -51,8 +53,6 @@ class Checkpoint:
         # 但是checkpoint不应该负责创建模型
         model.load_state_dict(state_dict)
         return model
-    
-    
 
     def save(self, path: Path):
         state = {

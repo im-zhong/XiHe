@@ -32,14 +32,25 @@ from transformers.tokenization_utils import PreTrainedTokenizer
 from torch.optim import Optimizer, Adam, AdamW
 from torch.utils.data import DataLoader
 from xihe.settings import Config
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 # torch.multiprocessing is a PyTorch wrapper around Python’s native multiprocessing
 import torch.multiprocessing as mp
 from typing import Any
+import random
+import numpy as np
 
 
 def create_tokenizer(tokenizer_name: str) -> PreTrainedTokenizer:
     return AutoTokenizer.from_pretrained(tokenizer_name)
+
+
+def set_all_rng_states(rng_states):
+    random.setstate(rng_states["python"])
+    np.random.set_state(rng_states["numpy"])
+    torch.set_rng_state(rng_states["torch_cpu"])
+    if rng_states["torch_cuda"] is not None:
+        torch.cuda.set_rng_state_all(rng_states["torch_cuda"])
 
 
 def train_from_scratch(rank, world_size, config: Config):
@@ -162,6 +173,8 @@ def train_from_checkpoint(rank: int, world_size: int, checkpoint: dict[str, Any]
     torch.cuda.set_device(rank)  # Set the default CUDA device to 0
     wandb.login()
 
+    set_all_rng_states(checkpoint["rng_state"])
+
     # 需要设计一种文件结构
     # 不对啊，其实没有任何的必要
     # 我们就全部放在一个大的dict里面就行了
@@ -192,28 +205,9 @@ def train_from_checkpoint(rank: int, world_size: int, checkpoint: dict[str, Any]
         intermediate_size=config.model.intermediate_size,
         device=config.trainer.device,  # Pass the device from config
     )
+    # model = checkpoint.load_model(model)
     model.load_state_dict(checkpoint["model"])
     model = model.to(rank)
-
-    # load optimizer
-    optimizer: Optimizer = create_optimizer(
-        name=config.optimizer.optimizer_name,
-        learning_rate=config.optimizer.initial_lr,
-        weight_decay=config.optimizer.weight_decay,
-        parameters=model.parameters(),
-    )
-    optimizer.load_state_dict(checkpoint["optimizer"])
-
-    # load scheduler
-    lr_scheduler: LambdaLR = create_cosine_lr_scheduler(
-        optimizer=optimizer,
-        warmup_steps=config.trainer.warmup_steps,
-        total_steps=config.trainer.total_steps,
-        initial_lr=config.optimizer.initial_lr,
-        max_lr=config.optimizer.max_lr,
-        final_lr=config.optimizer.final_lr,
-    )
-    lr_scheduler.load_state_dict(checkpoint["scheduler"])
 
     # TODO: 这个还需要研究
     # load dataloader
@@ -253,7 +247,35 @@ def train_from_checkpoint(rank: int, world_size: int, checkpoint: dict[str, Any]
         rank=rank,
         world_size=world_size,
     )
-    dataloader.load_state_dict(checkpoint[f"dataloader-{rank}"])
+    # TODO: 这些特定的save和load逻辑都应该封装在一起
+    # 方便阅读理解和测试
+    dataloader.load_state_dict(checkpoint["dataloader"][rank])
+
+    grad_scaler = torch.amp.GradScaler("cuda", enabled=config.trainer.use_amp)
+    grad_scaler.load_state_dict(checkpoint["grad_scaler"])
+
+    model = model.to(rank)
+    model = DDP(model, device_ids=[rank])
+
+    # load optimizer
+    optimizer: Optimizer = create_optimizer(
+        name=config.optimizer.optimizer_name,
+        learning_rate=config.optimizer.initial_lr,
+        weight_decay=config.optimizer.weight_decay,
+        parameters=model.parameters(),
+    )
+    optimizer.load_state_dict(checkpoint["optimizer"])
+
+    # load scheduler
+    lr_scheduler: LambdaLR = create_cosine_lr_scheduler(
+        optimizer=optimizer,
+        warmup_steps=config.trainer.warmup_steps,
+        total_steps=config.trainer.total_steps,
+        initial_lr=config.optimizer.initial_lr,
+        max_lr=config.optimizer.max_lr,
+        final_lr=config.optimizer.final_lr,
+    )
+    lr_scheduler.load_state_dict(checkpoint["scheduler"])
 
     # # Initialize the trainer
     # TODO: 这里感觉也不是很好
@@ -262,6 +284,7 @@ def train_from_checkpoint(rank: int, world_size: int, checkpoint: dict[str, Any]
     # 然后DDP又复制了一次
     # 不过这个点感觉消耗的时间并不多，所以先这样吧
     trainer = DistributedGPTTrainer(
+        config=config,
         vocab_size=config.tokenizer.vocab_size,
         model=model,
         optimizer=optimizer,
@@ -269,13 +292,14 @@ def train_from_checkpoint(rank: int, world_size: int, checkpoint: dict[str, Any]
         dataloader=dataloader,
         device=config.trainer.device,
         # dtype=config.model.dtype,
+        grad_scaler=grad_scaler,
+        rank=rank,
+        world_size=world_size,
         run=run,
     )
 
     # Start training
     trainer.train(rank, world_size)
-
-    pass
 
 
 # 这样这里的代码就非常简单，就是配置 + 调用函数
