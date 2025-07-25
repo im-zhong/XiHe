@@ -26,23 +26,18 @@ from pathlib import Path
 from typing import Any
 
 
+# ckpt1000.tar
+# checkpoint1000.tar
+# ckpt_1000.tar
+# ckpt-1000.tar
+#
+
 # 这个不能叫做ModelConfig
 # 我们还有TrainerConfig
 # EvalConfig 等等的东西
 # 还有就是这个东西
 from pydantic import BaseModel, Field
 from typing import Literal
-
-
-class PathConfig(BaseModel):
-    cache_dir: Path = Field(
-        default=Path("./cache"),
-        description="Directory to store cached datasets and models.",
-    )
-    checkpoint_dir: Path = Field(
-        default=Path("./checkpoints"),
-        description="Directory to save model checkpoints.",
-    )
 
 
 class WandbConfig(BaseModel):
@@ -161,3 +156,9 @@ def load_config(conf_file: Path) -> Config:
     with open(file=conf_file, mode="rb") as f:
         config_data: dict[str, Any] = tomllib.load(f)
     return Config(**config_data)
+
+
+# 我悟了 有两种类型的常量
+# 一种是程序预定的东西，一般写死在代码里面
+# 另一种就是现在的配置，是从配置文件中读取的
+# 定义一下

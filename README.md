@@ -20,10 +20,11 @@ My LLM.
    1. [x] 可以用小批量数据在小规模模型上跑通
 3. 2025/7/24
    1. [x] 添加cosine scheduler的单元测试，应该用ipynb展示出来更合适
-   2. [ ] 添加dataloader的单元测试，可能需要设置drop last batch
-   3. [x] 实现混合精度训练， amp？
-   4. [x] 适配wandb
-   5. [x] 实现DDP
-   6. [x] 实现模型保存和加载 <https://docs.pytorch.org/tutorials/beginner/saving_loading_models.html>，需要确认所有需要保存的状态和如何加载这些状态。以及一个保存模型的策略
-   7. 确定XiHe 120M 模型的各种参数
-   8. 开始模型分布式训练！<https://docs.pytorch.org/tutorials/intermediate/ddp_series_minGPT.html> 又找到一个代码参考源，不过这个也是咱们写完之后对答案用吧
+   2. [x] 实现混合精度训练， amp
+   3. [x] 适配wandb
+   4. [x] 实现DDP
+4. 2025/7/25
+   1. [x] 实现模型保存和加载 <https://docs.pytorch.org/tutorials/beginner/saving_loading_models.html>，需要确认所有需要保存的状态和如何加载这些状态。以及一个保存模型的策略
+   2. [ ] 添加单元测试并重构
+   3. 确定XiHe 120M 模型的各种参数
+   4. 开始模型分布式训练！<https://docs.pytorch.org/tutorials/intermediate/ddp_series_minGPT.html> 又找到一个代码参考源，不过这个也是咱们写完之后对答案用吧
