@@ -90,15 +90,7 @@ class BasicGPTTrainer:
                 shifted_labels.view(-1),
             )
 
-        # 因为会有多个进程，并且gradient是在backward之后才能汇总起来
-        # 所以loss只能按照rank来打印了 没法打印整体的
-        if self.run:
-            # Log loss to wandb
-            self.run.log({f"loss-{self.rank}": loss.item()})
-            # log lr
-            # 但是learning rate所有的进程都是一样的
-            if self.rank == 0:
-                self.run.log({"learning_rate": self.scheduler.get_last_lr()[0]})
+        loss_item = loss.item()
 
         # Scales loss. Calls ``backward()`` on scaled loss to create scaled gradients.
         self.grad_scaler.scale(loss).backward()
@@ -133,6 +125,7 @@ class BasicGPTTrainer:
         # if step % self.config.save_steps == 0:
         #     # Save model checkpoint
         #     self.save_model()
+        return loss_item
 
     # TODO: 感觉把这个类写出来，可以做单元测试了呀
     # 这个类也要尽可能的包含功能，这样可以让main.py代码更少

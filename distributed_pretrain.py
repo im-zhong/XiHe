@@ -38,6 +38,32 @@ import random
 import numpy as np
 
 
+# 这样整体上好一些
+def train_from_scratch(
+    conf_file: Path,
+    world_size: int,
+    run: Run,
+) -> None:
+    config = load_config(conf_file)
+    trainer = DistributedGPTTrainer(
+        world_size=world_size,
+        run=run,
+    )
+    trainer.train_from_scratch(config)
+
+
+def train_from_checkpoint(
+    checkpoint: dict[str, Any],
+    world_size: int,
+    run: Run,
+) -> None:
+    trainer = DistributedGPTTrainer(
+        world_size=world_size,
+        run=run,
+    )
+    trainer.train_from_checkpoint(checkpoint)
+
+
 # 这样这里的代码就非常简单，就是配置 + 调用函数
 # 这样最好
 if __name__ == "__main__":
@@ -56,17 +82,13 @@ if __name__ == "__main__":
     world_size = torch.cuda.device_count()
     print(f"Number of GPUs available: {world_size}", flush=True)
 
-    trainer = DistributedGPTTrainer(
-        world_size=world_size,
-        run=run,
-    )
     # 对应着两种模式，一种是从头开始train，一种是从途中开始train
     # 要不写两个main吧，或者写两个train
     # 一个是train_from_scratch，一个是train_from_checkpoint
     if conf_file is not None:
         config = load_config(conf_file)
         mp.spawn(
-            trainer.train_from_scratch,
+            train_from_scratch,
             args=(world_size, config),
             nprocs=world_size,
             join=True,
@@ -75,7 +97,7 @@ if __name__ == "__main__":
     else:
         checkpoint: dict[str, Any] = torch.load(ckpt_dir)
         mp.spawn(
-            trainer.train_from_checkpoint,
+            train_from_checkpoint,
             args=(world_size, checkpoint),
             nprocs=world_size,
             join=True,

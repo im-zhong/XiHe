@@ -7,6 +7,7 @@ from .trainer import TransformerTrainer
 #     create_optimizer,
 # )
 from .basic_trainer import BasicGPTTrainer
+from .distributed_trainer import DistributedGPTTrainer
 
 __all__: list[str] = [
     "TransformerTrainer",
@@ -15,4 +16,5 @@ __all__: list[str] = [
     # "create_optimizer",
     # "DistributedGPTTrainer",
     "BasicGPTTrainer",
+    "DistributedGPTTrainer",
 ]

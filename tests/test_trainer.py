@@ -16,6 +16,9 @@ from xihe.dataset import create_dataloader
 from xihe.schemas import DatasetArgs
 from torch.optim.lr_scheduler import LambdaLR
 import torch
+from xihe.settings import Config
+from tests.common import generate_testing_config
+from xihe.trainer import DistributedGPTTrainer
 
 
 def test_basic_gpt_trainer():
@@ -120,3 +123,24 @@ def test_basic_gpt_trainer():
 
     state_dict = trainer.get_state_dict(step=0)
     print(f"Trainer state dict: {state_dict}")
+
+
+# def test_distributed_trainer_from_scratch():
+#     # 那么这里就要先构造一个config对象
+#     # 咱们最好不要从example_conf来读
+#     # 就在这里构造一个config对象就行了 减少对外部的依赖
+#     config = generate_testing_config()
+#     print(f"Config: {config}")
+#     rank = 0
+#     world_size = 1
+#     trainer = DistributedGPTTrainer(
+#         rank=rank,
+#         world_size=world_size,  # For testing, we can use a single process
+#         run=None,  # No wandb run for this test
+#     )
+
+#     trainer.train_from_scratch(rank=rank, world_size=world_size, config=config)
+
+
+def test_distributed_trainer_from_ckpt():
+    pass
