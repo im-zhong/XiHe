@@ -125,21 +125,22 @@ def test_basic_gpt_trainer():
     print(f"Trainer state dict: {state_dict}")
 
 
-# def test_distributed_trainer_from_scratch():
-#     # 那么这里就要先构造一个config对象
-#     # 咱们最好不要从example_conf来读
-#     # 就在这里构造一个config对象就行了 减少对外部的依赖
-#     config = generate_testing_config()
-#     print(f"Config: {config}")
-#     rank = 0
-#     world_size = 1
-#     trainer = DistributedGPTTrainer(
-#         rank=rank,
-#         world_size=world_size,  # For testing, we can use a single process
-#         run=None,  # No wandb run for this test
-#     )
+def test_distributed_trainer_from_scratch():
+    # 那么这里就要先构造一个config对象
+    # 咱们最好不要从example_conf来读
+    # 就在这里构造一个config对象就行了 减少对外部的依赖
+    config = generate_testing_config()
+    print(f"Config: {config}")
+    rank = 0
+    world_size = 1
+    trainer = DistributedGPTTrainer(
+        rank=rank,
+        world_size=world_size,  # For testing, we can use a single process
+        run=None,  # No wandb run for this test
+        config=config,  # Pass the config directly
+    )
 
-#     trainer.train_from_scratch(rank=rank, world_size=world_size, config=config)
+    trainer.train_from_scratch(rank=rank, world_size=world_size, config=config)
 
 
 def test_distributed_trainer_from_ckpt():

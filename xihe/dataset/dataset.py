@@ -183,8 +183,8 @@ def calculate_sampling_probabilities(
 # 可以先实现一个简单的函数
 # 根据一个DatasetConfig返回一个Dataset
 def create_dataset(
-    path: str, name: str, split: str, to_iterable: bool = True
-) -> Dataset | IterableDataset:
+    path: str, name: str, split: str, streaming: bool
+) -> IterableDataset:
     # 因为我们需要对数据进行预处理
     # 所以实际上只有我们实验过的数据集才可以使用
     # 也就是必须在我们定义的枚举里面
@@ -196,8 +196,9 @@ def create_dataset(
         path=path,
         name=name,
         split=split,
+        streaming=streaming,
     )
-    assert isinstance(dataset, Dataset), "Loaded dataset is not a Dataset instance"
+    # assert isinstance(dataset, Dataset), "Loaded dataset is not a Dataset instance"
     # 需不需要转成iterable dataset?
     # 这个应该由一个参数来控制
 
@@ -215,6 +216,6 @@ def create_dataset(
         remove_columns=dataset.column_names,
     )
 
-    if to_iterable:
+    if not streaming:
         return preprocessed_dataset.to_iterable_dataset()
     return preprocessed_dataset

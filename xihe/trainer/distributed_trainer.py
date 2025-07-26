@@ -30,6 +30,8 @@ from torchdata.stateful_dataloader import StatefulDataLoader
 from xihe.tokenizer import create_tokenizer
 from xihe.dataset import create_dataloader
 import torch.distributed as dist
+from typing import Any
+from xihe.defs import defs
 
 # 我感觉也没必要整两个，因为我们就是从Config里面读出来的
 # 他们俩用一个就行了
@@ -47,6 +49,7 @@ class DistributedGPTTrainer:
         self,
         rank: int,
         world_size: int,
+        config: Config,
         run: Run | None = None,
         # dtype: str = "float32", 我觉得先不用这个参数吧
         # 其实混合精度的原理我还不理解
@@ -58,6 +61,7 @@ class DistributedGPTTrainer:
         self.rank = rank
         self.world_size = world_size
         self.run = run
+        self.config = config
 
     # def get_state_dict(self, step: int):
     #     # only rank 0 should save the checkpoint
@@ -104,6 +108,7 @@ class DistributedGPTTrainer:
     # 这样可以减少冗余的代码，这个函数就可以叫做train
     # 然后有一个内部函数叫做 train_loop 目前看来是比较合适的了
     def train_from_scratch(self, rank, world_size, config: Config):
+        self.setup(rank, world_size)
         # TODO: tmp set this code, if we impl ddp, should delete this
         # ? 这设置的不是torch 创建tensor的默认设备？
         # 这个并不是用来设置默认设备的，pytorch没有提供这个功能
@@ -144,6 +149,7 @@ class DistributedGPTTrainer:
             device=config.trainer.device,  # Pass the device from config
         )
         model = model.to(config.trainer.device)
+        # TODO: need to call init_process_group, but where?
         model = DDP(model, device_ids=[rank])
 
         # 这里需要创建optimizer和scheduler
@@ -189,6 +195,8 @@ class DistributedGPTTrainer:
             scheduler=lr_scheduler,
             world_size=world_size,
         )
+
+        self.cleanup()
 
     # 这个传入一个checkpoint对象更好吧
     # 咱们先不直接写checkpoint了，先用最简单的方式把这个函数写出来
@@ -317,7 +325,9 @@ class DistributedGPTTrainer:
         torch.cuda.set_device(rank)
         # Setup distributed training environment
         torch.distributed.init_process_group(
-            backend="nccl", rank=rank, world_size=world_size
+            # backend="nccl",
+            rank=rank,
+            world_size=world_size,
         )
 
     def cleanup(self):
@@ -342,8 +352,6 @@ class DistributedGPTTrainer:
         world_size: int,
     ):
         # get trainer from
-
-        self.setup(rank, world_size)
 
         # torch.amp.Scaler 需要需要保存状态呢？
         # 还真需要保存啊
@@ -387,27 +395,48 @@ class DistributedGPTTrainer:
             # if step % 1000 == 0:
             #     self.save_checkpoint(step=step, trainer=trainer, dataloader=dataloader)
 
-        self.cleanup()
+    # 算了，收集dataloader state extract a function
+    def get_dataloader_state(
+        self, dataloader: StatefulDataLoader, rank: int
+    ) -> list[Any] | None:
+        # prepare local data
+        dataloader_state = dataloader.state_dict()
+
+        # rank 0 collect all states
+        # and other ranks do not
+        gathered_dataloader_state = None
+        if self.rank == 0:
+            # prepare a list to gather all states
+            gathered_dataloader_state = [None for _ in range(self.world_size)]
+
+        dist.gather_object(
+            obj=dataloader_state,
+            object_gather_list=gathered_dataloader_state,
+            dst=0,
+        )
+        return gathered_dataloader_state
 
     def save_checkpoint(
         self, step: int, trainer: BasicGPTTrainer, dataloader: StatefulDataLoader
     ):
         # only rank 0 should save the checkpoint
+        # 先从其他节点哪里拿到dataloader
+        gathered_dataloader_state = self.get_dataloader_state(
+            dataloader=dataloader, rank=self.rank
+        )
+
         if self.rank != 0:
             return
 
-        checkpoint = trainer.get_state_dict(step=step)
-        if checkpoint is None:
-            return
-
-        dataloader_state = dataloader.state_dict()
-        dist.gather_object(
-            obj=dataloader_state, object_gather_list=checkpoint["dataloader"], dst=0
-        )
-        checkpoint["dataloader"] = checkpoint["dataloader"][self.rank]
+        checkpoint: dict[str, Any] = trainer.get_state_dict(step=step)
+        checkpoint["dataloader"] = gathered_dataloader_state
+        checkpoint["config"] = self.config
 
         # save the checkpoint to a file
         # 应该是不需要在配置里面写上路径的
         # 需要在在.cache/checkpoint_1000.pt ?
         # 那如果是多次训练呢？
-        torch.save(checkpoint, f"checkpoint_{step}.pt")
+        torch.save(
+            checkpoint,
+            defs.get_ckpt_path(project=self.config.wandb.project, step=step),
+        )

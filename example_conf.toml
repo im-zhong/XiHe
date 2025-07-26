@@ -8,14 +8,14 @@ batch_size = 8
 path = "allenai/c4"
 name = "en"
 split = "train[:1024]"
-streaming = false
+streaming = true
 num_epochs = 1
 
 [[dataloader.datasets]]
 path = "wikimedia/wikipedia"
 name = "20231101.en"
 split = "train[:1024]"
-streaming = false
+streaming = true
 num_epochs = 2
 
 

@@ -149,7 +149,7 @@ class BasicGPTTrainer:
         # Implement the evaluation logic
         pass
 
-    def get_state_dict(self, step: int):
+    def get_state_dict(self, step: int) -> dict[str, Any]:
         # only rank 0 should save the checkpoint
         # save the model, optimizer, scheduler, scaler, and config
         # save the model state dict
@@ -162,9 +162,6 @@ class BasicGPTTrainer:
         # dist.gather_object(
         #     obj=dataloader_state, object_gather_list=gathered_dataloader_state, dst=0
         # )
-
-        if self.rank != 0:
-            return
 
         checkpoint = {
             "model": self.model.state_dict(),

@@ -120,16 +120,19 @@ def generate_testing_config() -> Config:
                 DatasetArgs(
                     path="allenai/c4",
                     name="en",
-                    split="train[:1024]",
-                    streaming=False,
+                    # streaming=True, 下，不支持slice
+                    # split="train[:1024]",
+                    split="train",
                     num_epochs=1,
+                    streaming=True,
                 ),
                 DatasetArgs(
                     path="wikimedia/wikipedia",
                     name="20231101.en",
-                    split="train[:1024]",
-                    streaming=False,
+                    # split="train[:1024]",
+                    split="train",
                     num_epochs=2,
+                    streaming=True,
                 ),
             ],
         ),

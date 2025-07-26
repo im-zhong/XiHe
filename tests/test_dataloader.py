@@ -12,16 +12,19 @@ def test_create_dataloader() -> None:
         DatasetArgs(
             path="allenai/c4",
             name="en",
-            split="train[:1024]",
+            # streaming=True, 下，不支持slice
+            # split="train[:1024]",
+            split="train",
             num_epochs=1,
-            streaming=False,
+            streaming=True,
         ),
         DatasetArgs(
             path="wikimedia/wikipedia",
             name="20231101.en",
-            split="train[:1024]",
+            # split="train[:1024]",
+            split="train",
             num_epochs=2,
-            streaming=False,
+            streaming=True,
         ),
     ]
 
@@ -32,6 +35,7 @@ def test_create_dataloader() -> None:
         context_length=512,
         world_size=4,
         datasets_args=datasets_args,
+        sampling_probabilities=[0.5, 0.5],  # Example sampling probabilities
     )
 
     assert dataloader is not None

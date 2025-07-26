@@ -23,6 +23,7 @@ def create_dataloader(
             path=dataset.path,
             name=dataset.name,
             split=dataset.split,
+            streaming=dataset.streaming,
         )
         for dataset in datasets_args
     ]
