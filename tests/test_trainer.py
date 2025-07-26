@@ -19,6 +19,7 @@ import torch
 from xihe.settings import Config
 from tests.common import generate_testing_config
 from xihe.trainer import DistributedGPTTrainer
+from xihe.defs import defs
 
 
 def test_basic_gpt_trainer():
@@ -144,4 +145,25 @@ def test_distributed_trainer_from_scratch():
 
 
 def test_distributed_trainer_from_ckpt():
-    pass
+    checkpoint = torch.load(defs.get_ckpt_path(project="test", step=10))
+    # get xxx state
+    # 我感觉还是给封装一下比较好吧
+    # 做一个Checkpoint
+    config: Config = checkpoint["config"]
+
+    rank = 0
+    world_size = 1
+    trainer = DistributedGPTTrainer(
+        rank=rank,
+        world_size=world_size,  # For testing, we can use a single process
+        run=None,  # No wandb run for this test
+        config=config,  # Pass the config directly
+    )
+
+    # TODO: just finish this function, we are almost done!
+    trainer.train(
+        rank=rank,
+        world_size=world_size,
+        config=config,  # Pass the config directly
+        checkpoint=checkpoint,  # Load from the checkpoint
+    )

@@ -432,6 +432,8 @@ class DistributedGPTTrainer:
         checkpoint["dataloader"] = gathered_dataloader_state
         checkpoint["config"] = self.config
 
+        # config = checkpoint.load_config()
+
         # save the checkpoint to a file
         # 应该是不需要在配置里面写上路径的
         # 需要在在.cache/checkpoint_1000.pt ?
