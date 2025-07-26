@@ -1,7 +1,6 @@
 # 2025/7/24
 # zhangzhong
 
-
 # 我们希望怎么使用这个脚本呢？
 # pretrain.py --config config.yaml
 # 剩下的所有配置都写在配置文件里面就行了呗
@@ -13,8 +12,6 @@ from xihe.model import Transformer
 from xihe.settings import load_config
 from xihe.trainer import (
     DistributedGPTTrainer,
-    create_optimizer,
-    create_cosine_lr_scheduler,
 )
 from xihe.dataset import (
     PackingDataset,
@@ -36,32 +33,30 @@ import torch.multiprocessing as mp  # torch.multiprocessing is a PyTorch wrapper
 from typing import Any
 import random
 import numpy as np
+from xihe.ckpt import Checkpoint, load_ckpt_from_path
 
 
 # 这样整体上好一些
-def train_from_scratch(
-    conf_file: Path,
-    world_size: int,
-    run: Run,
-) -> None:
-    config = load_config(conf_file)
+def train_from_scratch(rank: int, world_size: int, config: Config) -> None:
     trainer = DistributedGPTTrainer(
+        rank=rank,
         world_size=world_size,
-        run=run,
+        config=config,
     )
-    trainer.train_from_scratch(config)
+    trainer.train(config)
 
 
 def train_from_checkpoint(
-    checkpoint: dict[str, Any],
+    rank: int,
     world_size: int,
-    run: Run,
+    checkpoint: Checkpoint,
 ) -> None:
     trainer = DistributedGPTTrainer(
+        rank=rank,
         world_size=world_size,
-        run=run,
+        config=checkpoint.get_config(),
     )
-    trainer.train_from_checkpoint(checkpoint)
+    trainer.train(config, ckpt=checkpoint)
 
 
 # 这样这里的代码就非常简单，就是配置 + 调用函数
@@ -95,7 +90,7 @@ if __name__ == "__main__":
         )
         # train_from_scratch(conf_file)
     else:
-        checkpoint: dict[str, Any] = torch.load(ckpt_dir)
+        checkpoint: Checkpoint = load_ckpt_from_path(ckpt_dir)
         mp.spawn(
             train_from_checkpoint,
             args=(world_size, checkpoint),
