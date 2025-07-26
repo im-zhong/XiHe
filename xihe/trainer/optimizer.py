@@ -19,9 +19,9 @@ from torch.optim import Optimizer, Adam, AdamW
 def create_optimizer(
     name: str, learning_rate: float, weight_decay: float, parameters
 ) -> Optimizer:
-    if name == "AdamW":
+    if name.lower() == "adamw":
         return AdamW(params=parameters, lr=learning_rate, weight_decay=weight_decay)
-    elif name == "Adam":
+    elif name.lower() == "adam":
         return Adam(params=parameters, lr=learning_rate, weight_decay=weight_decay)
     else:
         raise ValueError(f"Unsupported optimizer: {name}")

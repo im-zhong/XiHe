@@ -32,7 +32,7 @@ class BasicGPTTrainer:
         # settings: ModelConfig,
         optimizer: Optimizer,
         scheduler: LambdaLR,
-        dataloader: StatefulDataLoader,
+        # dataloader: StatefulDataLoader,
         grad_scaler: torch.amp.GradScaler,
         rank: int,
         world_size: int,
@@ -55,7 +55,7 @@ class BasicGPTTrainer:
         # self.tokenizer = model.tokenizer
         self.optimizer = optimizer
         self.scheduler = scheduler
-        self.dataloader = dataloader
+        # self.dataloader = dataloader
         self.device = device
         self.run = run
         self.max_norm = max_norm
@@ -64,47 +64,7 @@ class BasicGPTTrainer:
         self.world_size = world_size
         self.loss_fn = torch.nn.CrossEntropyLoss()
 
-    def get_state_dict(self, step: int):
-        # only rank 0 should save the checkpoint
-        # save the model, optimizer, scheduler, scaler, and config
-        # save the model state dict
-
-        # 首先gather所有的dataloader state
-        gathered_dataloader_state = None
-        if self.rank == 0:
-            gathered_dataloader_state = [None for _ in range(self.world_size)]
-        dataloader_state = self.dataloader.state_dict()
-        dist.gather_object(
-            obj=dataloader_state, object_gather_list=gathered_dataloader_state, dst=0
-        )
-
-        if self.rank != 0:
-            return
-
-        checkpoint = {
-            "model": self.model.state_dict(),
-            "optimizer": self.optimizer.state_dict(),
-            "scheduler": self.scheduler.state_dict(),
-            "grad_scaler": self.grad_scaler.state_dict(),
-            "dataloader": gathered_dataloader_state,
-            # "config": self.config.model_dump(),
-            "step": step,
-            # TODO: maybe save the random state as well
-            # 保存随机数状态是为了可复现
-            # 但是我们的系统有什么复现的必要吗
-            # 没必要，所以不保存了
-            "rngom_state": get_all_rng_states(),
-        }
-        return checkpoint
-        # save the checkpoint to a file
-        # 应该是不需要在配置里面写上路径的
-        # 需要在在.cache/checkpoint_1000.pt ?
-        # 那如果是多次训练呢？
-        # torch.save(checkpoint, self.config.checkpoint_path)
-
-    def train_step(
-        self, step: int, batch: dict[str, Tensor], scaler: torch.amp.GradScaler
-    ):
+    def train_step(self, step: int, batch: dict[str, Tensor]):
         self.optimizer.zero_grad()
 
         # 因为咱也没有支持bfloat16的设置，所以就不进行配置了
@@ -141,11 +101,11 @@ class BasicGPTTrainer:
                 self.run.log({"learning_rate": self.scheduler.get_last_lr()[0]})
 
         # Scales loss. Calls ``backward()`` on scaled loss to create scaled gradients.
-        scaler.scale(loss).backward()
+        self.grad_scaler.scale(loss).backward()
 
         # 我们在这里需要unscale 因为需要做clip
         # Unscales the gradients of optimizer's assigned params in-place
-        scaler.unscale_(self.optimizer)
+        self.grad_scaler.unscale_(self.optimizer)
 
         # Clip gradients to avoid exploding gradients
         # torch.nn.utils.clip_grad_norm_(
@@ -158,11 +118,11 @@ class BasicGPTTrainer:
         # If these gradients do not contain ``inf``s or ``NaN``s, optimizer.step() is then called,
         # otherwise, optimizer.step() is skipped.
         # self.optimizer.step()
-        scaler.step(self.optimizer)
+        self.grad_scaler.step(self.optimizer)
 
         # Updates the scale for next iteration.
         # scaler need to update its scaling factor, because of dynamic scaling tricks
-        scaler.update()
+        self.grad_scaler.update()
 
         # Update the learning rate
         self.scheduler.step()
@@ -176,22 +136,60 @@ class BasicGPTTrainer:
 
     # TODO: 感觉把这个类写出来，可以做单元测试了呀
     # 这个类也要尽可能的包含功能，这样可以让main.py代码更少
-    def load_state_dict(self, rank: int, state_dict: dict[str, Any]):
-        set_all_rng_states(state_dict["rng_state"])
+    # def load_state_dict(self, rank: int, state_dict: dict[str, Any]):
+    #     set_all_rng_states(state_dict["rng_state"])
 
-        self.model.load_state_dict(state_dict["model"])
-        self.model = self.model.to(rank)
+    #     self.model.load_state_dict(state_dict["model"])
+    #     self.model = self.model.to(rank)
 
-        self.dataloader.load_state_dict(state_dict["dataloader"][rank])
-        self.grad_scaler.load_state_dict(state_dict["grad_scaler"])
+    #     self.dataloader.load_state_dict(state_dict["dataloader"][rank])
+    #     self.grad_scaler.load_state_dict(state_dict["grad_scaler"])
 
-        # TODO: model = model(DDP) 这一步要放在哪里呢？
-        self.optimizer.load_state_dict(state_dict["optimizer"])
-        self.lr_scheduler.load_state_dict(state_dict["scheduler"])
+    #     # TODO: model = model(DDP) 这一步要放在哪里呢？
+    #     self.optimizer.load_state_dict(state_dict["optimizer"])
+    #     self.lr_scheduler.load_state_dict(state_dict["scheduler"])
 
-        pass
+    #     pass
 
     # TODO: 先不急，等SFT训练完了之后，在eval吧
     def evaluate(self):
         # Implement the evaluation logic
         pass
+
+    def get_state_dict(self, step: int):
+        # only rank 0 should save the checkpoint
+        # save the model, optimizer, scheduler, scaler, and config
+        # save the model state dict
+
+        # 首先gather所有的dataloader state
+        # gathered_dataloader_state = None
+        # if self.rank == 0:
+        #     gathered_dataloader_state = [None for _ in range(self.world_size)]
+        # dataloader_state = self.dataloader.state_dict()
+        # dist.gather_object(
+        #     obj=dataloader_state, object_gather_list=gathered_dataloader_state, dst=0
+        # )
+
+        if self.rank != 0:
+            return
+
+        checkpoint = {
+            "model": self.model.state_dict(),
+            "optimizer": self.optimizer.state_dict(),
+            "scheduler": self.scheduler.state_dict(),
+            "grad_scaler": self.grad_scaler.state_dict(),
+            # "dataloader": gathered_dataloader_state,
+            # "config": self.config.model_dump(),
+            "step": step,
+            # TODO: maybe save the random state as well
+            # 保存随机数状态是为了可复现
+            # 但是我们的系统有什么复现的必要吗
+            # 没必要，所以不保存了
+            # "rngom_state": get_all_rng_states(),
+        }
+        return checkpoint
+        # save the checkpoint to a file
+        # 应该是不需要在配置里面写上路径的
+        # 需要在在.cache/checkpoint_1000.pt ?
+        # 那如果是多次训练呢？
+        # torch.save(checkpoint, self.config.checkpoint_path)
