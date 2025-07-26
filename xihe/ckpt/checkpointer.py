@@ -5,7 +5,7 @@
 from xihe.trainer import TransformerTrainer
 from xihe.settings import load_config
 from xihe.dataset import create_dataset, PackingDataset
-from xihe.trainer.optimizer import create_optimizer, create_cosine_lr_scheduler
+from xihe.optimizer.optimizer import create_optimizer, create_cosine_lr_scheduler
 from pathlib import Path
 import wandb
 from wandb.sdk.wandb_run import Run

@@ -4,7 +4,7 @@
 from xihe.trainer import BasicGPTTrainer
 from pathlib import Path
 from xihe.model import Transformer
-from xihe.trainer import create_optimizer, create_cosine_lr_scheduler
+from xihe.optimizer import create_optimizer, create_cosine_lr_scheduler
 from xihe.dataset import create_dataset
 from transformers import AutoTokenizer
 from transformers.tokenization_utils import PreTrainedTokenizer

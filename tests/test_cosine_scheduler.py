@@ -10,7 +10,7 @@ import torch
 import os
 
 
-from xihe.trainer.optimizer import create_cosine_lr_scheduler
+from xihe.optimizer.optimizer import create_cosine_lr_scheduler
 
 
 def test_cosine_scheduler():
