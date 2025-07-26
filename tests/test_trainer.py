@@ -117,3 +117,6 @@ def test_basic_gpt_trainer():
             )
         },
     )
+
+    state_dict = trainer.get_state_dict(step=0)
+    print(f"Trainer state dict: {state_dict}")
