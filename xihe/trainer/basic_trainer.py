@@ -127,28 +127,6 @@ class BasicGPTTrainer:
         #     self.save_model()
         return loss_item
 
-    # TODO: 感觉把这个类写出来，可以做单元测试了呀
-    # 这个类也要尽可能的包含功能，这样可以让main.py代码更少
-    # def load_state_dict(self, rank: int, state_dict: dict[str, Any]):
-    #     set_all_rng_states(state_dict["rng_state"])
-
-    #     self.model.load_state_dict(state_dict["model"])
-    #     self.model = self.model.to(rank)
-
-    #     self.dataloader.load_state_dict(state_dict["dataloader"][rank])
-    #     self.grad_scaler.load_state_dict(state_dict["grad_scaler"])
-
-    #     # TODO: model = model(DDP) 这一步要放在哪里呢？
-    #     self.optimizer.load_state_dict(state_dict["optimizer"])
-    #     self.lr_scheduler.load_state_dict(state_dict["scheduler"])
-
-    #     pass
-
-    # TODO: 先不急，等SFT训练完了之后，在eval吧
-    def evaluate(self):
-        # Implement the evaluation logic
-        pass
-
     def get_state_dict(self, step: int) -> dict[str, Any]:
         # only rank 0 should save the checkpoint
         # save the model, optimizer, scheduler, scaler, and config
@@ -164,7 +142,8 @@ class BasicGPTTrainer:
         # )
 
         checkpoint = {
-            "model": self.model.state_dict(),
+            # 保存时如果是在 DDP 环境中，最好用 model.module.state_dict() 保存（而不是直接 model.state_dict()），这样就不会带 "module." 前缀。
+            "model": self.model.module.state_dict(),
             "optimizer": self.optimizer.state_dict(),
             "scheduler": self.scheduler.state_dict(),
             "grad_scaler": self.grad_scaler.state_dict(),

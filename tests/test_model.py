@@ -237,3 +237,28 @@ def test_transformer() -> None:
     # 验证输出形状
     assert output.shape == (batch_size, max_seq_len, vocab_size)
     assert not torch.any(torch.isnan(output))
+
+
+def test_transformer_state_dict() -> None:
+    torch.cuda.set_device(0)
+
+    vocab_size = 1024
+    hidden_size = 128
+    num_layers = 2
+    num_heads = 4
+    intermediate_size = hidden_size * 4
+    max_seq_len = 512
+
+    transformer = Transformer(
+        vocab_size=vocab_size,
+        hidden_size=hidden_size,
+        num_layers=num_layers,
+        num_heads=num_heads,
+        intermediate_size=intermediate_size,
+        max_seq_len=max_seq_len,
+    )
+
+    state_dict = transformer.state_dict()
+    print("State dict keys:", state_dict.keys())
+
+    transformer.load_state_dict(state_dict)

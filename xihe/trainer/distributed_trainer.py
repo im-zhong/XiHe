@@ -17,7 +17,7 @@ from xihe.optimizer import (
     create_optimizer,
     create_cosine_lr_scheduler,
 )
-from xihe.utils.wandb import init_wandb_run
+from xihe.utils.wandb import init_wandb_run, load_wnadb_run
 from .basic_trainer import BasicGPTTrainer
 from wandb.sdk.wandb_run import Run
 from xihe.settings import Config, WandbConfig
@@ -37,6 +37,7 @@ from xihe.defs import defs
 # 他们俩用一个就行了
 # config用schema就行了
 from xihe.schemas import DatasetArgs
+from xihe.ckpt import Checkpoint
 
 
 # TODO: 更名为 CausalLLMTrainer or GPTTrainer
@@ -107,17 +108,27 @@ class DistributedGPTTrainer:
     # 我有一个折衷的方案：就是把checkpoint作为可选参数放进来
     # 这样可以减少冗余的代码，这个函数就可以叫做train
     # 然后有一个内部函数叫做 train_loop 目前看来是比较合适的了
-    def train_from_scratch(self, rank, world_size, config: Config):
-        self.setup(rank, world_size)
+    def train(self, config: Config, ckpt: Checkpoint | None = None):
+        if ckpt and config != ckpt.get_config():
+            raise ValueError(
+                "The provided checkpoint configuration does not match the current configuration."
+            )
+
+        rank = self.rank
+        world_size = self.world_size
+        self.setup(self.rank, self.world_size)
         # TODO: tmp set this code, if we impl ddp, should delete this
         # ? 这设置的不是torch 创建tensor的默认设备？
         # 这个并不是用来设置默认设备的，pytorch没有提供这个功能
         # 这个是设置默认的cuda设备的，也就是当你指定 cuda 但是没有指定 cuda:id 的时候的默认id
-        torch.cuda.set_device(rank)  # Set the default CUDA device to 0
+        torch.cuda.set_device(self.rank)  # Set the default CUDA device to 0
 
         # Load configuration
         # config = load_config(Path(args.conf))
         # 在这里创建wandb更好
+        # 不对，其实wandb有智能检测的，只有是一个存在过的id
+        # 你再次初始化wandb 其实也是resume
+        # 所以没必要整两套逻辑
         run: Run = init_wandb_run(config=config)
 
         # get tokenizer from tokenizer configs
@@ -127,7 +138,7 @@ class DistributedGPTTrainer:
         tokenizer = create_tokenizer(config.tokenizer.tokenizer_name)
         dataloader: StatefulDataLoader = create_dataloader(
             tokenizer=tokenizer,
-            rank=rank,
+            rank=self.rank,
             world_size=world_size,
             batch_size=config.trainer.batch_size,
             context_length=config.model.context_length,
@@ -135,6 +146,8 @@ class DistributedGPTTrainer:
             datasets_args=config.dataloader.datasets,
             sampling_probabilities=config.dataloader.sampling_probabilities,
         )
+        if ckpt:
+            dataloader.load_state_dict(ckpt.get_dataloader_state_dict(self.rank))
 
         # # Initialize model
         # TODO: vocab size应该是不用设置的
@@ -148,6 +161,8 @@ class DistributedGPTTrainer:
             intermediate_size=config.model.intermediate_size,
             device=config.trainer.device,  # Pass the device from config
         )
+        if ckpt:
+            model.load_state_dict(ckpt.get_model_state_dict())
         model = model.to(config.trainer.device)
         # TODO: need to call init_process_group, but where?
         model = DDP(model, device_ids=[rank])
@@ -160,6 +175,9 @@ class DistributedGPTTrainer:
             weight_decay=config.optimizer.weight_decay,
             parameters=model.parameters(),
         )
+        if ckpt:
+            optimizer.load_state_dict(ckpt.get_optimizer_state_dict())
+
         lr_scheduler: LambdaLR = create_cosine_lr_scheduler(
             optimizer=optimizer,
             warmup_steps=config.trainer.warmup_steps,
@@ -168,8 +186,12 @@ class DistributedGPTTrainer:
             max_lr=config.optimizer.max_lr,
             final_lr=config.optimizer.final_lr,
         )
+        if ckpt:
+            lr_scheduler.load_state_dict(ckpt.get_scheduler_state_dict())
 
         grad_scaler = torch.amp.GradScaler("cuda")  # Enable mixed precision training
+        if ckpt:
+            grad_scaler.load_state_dict(ckpt.get_grad_scaler_state_dict())
 
         # # Initialize the trainer
         trainer = BasicGPTTrainer(
@@ -186,6 +208,7 @@ class DistributedGPTTrainer:
             run=run,
         )
 
+        start_step = ckpt.get_step() if ckpt else 0
         # Start training
         self.train_loop(
             model=model,
@@ -197,126 +220,6 @@ class DistributedGPTTrainer:
         )
 
         self.cleanup()
-
-    # 这个传入一个checkpoint对象更好吧
-    # 咱们先不直接写checkpoint了，先用最简单的方式把这个函数写出来
-    # 再看看能不能重构一个checkpoint出来
-    # def train_from_checkpoint(rank: int, world_size: int, checkpoint: dict[str, Any]):
-    #     torch.cuda.set_device(rank)  # Set the default CUDA device to 0
-    #     wandb.login()
-
-    #     set_all_rng_states(checkpoint["rng_state"])
-
-    #     # 需要设计一种文件结构
-    #     # 不对啊，其实没有任何的必要
-    #     # 我们就全部放在一个大的dict里面就行了
-    #     # 这样最灵活了，所以这应该是一个file而不是一个dir
-    #     # checkpoint: dict[str, Any] = torch.load(ckpt_file)
-    #     # resume config first
-    #     # TODO: 这里的每一步都应该可以被测试
-    #     config: Config = Config(**checkpoint["config"])
-
-    #     # then load wandb
-    #     run: Run = load_wnadb_run(wandb_config=config.wandb)
-
-    #     # TODO: 这个还需要研究
-    #     # load dataloader
-    #     # 那就只需要构建dataset
-    #     # 生成dataloader
-    #     # 然后load state就行了
-
-    #     # 算了，我一直纠结的点在于，我想要测试load state的过程
-    #     # 但是这一部分也没什么好测的呀
-    #     tokenizer = create_tokenizer(config.tokenizer.tokenizer_name)
-    #     dataloader = get_dataloader(
-    #         tokenizer=tokenizer,
-    #         rank=rank,
-    #         world_size=world_size,
-    #         config=config,
-    #     )
-    #     # TODO: 这些特定的save和load逻辑都应该封装在一起
-    #     # 方便阅读理解和测试
-    #     dataloader.load_state_dict(checkpoint["dataloader"][rank])
-
-    #     grad_scaler = torch.amp.GradScaler("cuda", enabled=config.trainer.use_amp)
-    #     grad_scaler.load_state_dict(checkpoint["grad_scaler"])
-
-    #     # load model
-    #     # define model first
-    #     model = Transformer(
-    #         vocab_size=config.tokenizer.vocab_size,
-    #         max_seq_len=config.model.context_length,
-    #         num_layers=config.model.num_layers,
-    #         hidden_size=config.model.hidden_size,
-    #         num_heads=config.model.num_heads,
-    #         intermediate_size=config.model.intermediate_size,
-    #         device=config.trainer.device,  # Pass the device from config
-    #     )
-    #     # model = checkpoint.load_model(model)
-    #     model.load_state_dict(checkpoint["model"])
-    #     model = model.to(rank)
-    #     model = DDP(model, device_ids=[rank])
-
-    #     # load optimizer
-    #     optimizer: Optimizer = create_optimizer(
-    #         name=config.optimizer.optimizer_name,
-    #         learning_rate=config.optimizer.initial_lr,
-    #         weight_decay=config.optimizer.weight_decay,
-    #         parameters=model.parameters(),
-    #     )
-    #     optimizer.load_state_dict(checkpoint["optimizer"])
-
-    #     # load scheduler
-    #     lr_scheduler: LambdaLR = create_cosine_lr_scheduler(
-    #         optimizer=optimizer,
-    #         warmup_steps=config.trainer.warmup_steps,
-    #         total_steps=config.trainer.total_steps,
-    #         initial_lr=config.optimizer.initial_lr,
-    #         max_lr=config.optimizer.max_lr,
-    #         final_lr=config.optimizer.final_lr,
-    #     )
-    #     lr_scheduler.load_state_dict(checkpoint["scheduler"])
-
-    #     # # Initialize the trainer
-    #     # TODO: 这里感觉也不是很好
-    #     # 模型是不是应该只加载一次？然后由DDP负责将模型复制到每个GPU上？
-    #     # 现在的写法，每个rank都会创建一个新的模型实例，都会加载之前的权重
-    #     # 然后DDP又复制了一次
-    #     # 不过这个点感觉消耗的时间并不多，所以先这样吧
-    #     trainer = BasicGPTTrainer(
-    #         # config=config,
-    #         vocab_size=config.tokenizer.vocab_size,
-    #         model=model,
-    #         optimizer=optimizer,
-    #         scheduler=lr_scheduler,
-    #         dataloader=dataloader,
-    #         device=config.trainer.device,
-    #         # dtype=config.model.dtype,
-    #         grad_scaler=grad_scaler,
-    #         rank=rank,
-    #         world_size=world_size,
-    #         run=run,
-    #     )
-
-    #     # Start training
-    #     self.train(trainer)
-
-    # TODO: 感觉把这个类写出来，可以做单元测试了呀
-    # 这个类也要尽可能的包含功能，这样可以让main.py代码更少
-    # def load_state_dict(self, rank: int, state_dict: dict[str, Any]):
-    #     set_all_rng_states(state_dict["rng_state"])
-
-    #     self.model.load_state_dict(state_dict["model"])
-    #     self.model = self.model.to(rank)
-
-    #     self.dataloader.load_state_dict(state_dict["dataloader"][rank])
-    #     self.grad_scaler.load_state_dict(state_dict["grad_scaler"])
-
-    #     # TODO: model = model(DDP) 这一步要放在哪里呢？
-    #     self.optimizer.load_state_dict(state_dict["optimizer"])
-    #     self.lr_scheduler.load_state_dict(state_dict["scheduler"])
-
-    #     pass
 
     # only work with nvidia GPUs
     def setup(self, rank: int, world_size: int):
@@ -344,6 +247,7 @@ class DistributedGPTTrainer:
     # https://docs.pytorch.org/docs/stable/amp.html
     def train_loop(
         self,
+        start_step: int,
         model: DDP,
         dataloader: StatefulDataLoader,
         trainer: BasicGPTTrainer,
@@ -367,7 +271,8 @@ class DistributedGPTTrainer:
         # TODO: 我记得DDP加载模型还需要barrier来着
 
         model.train()
-        for step, batch in tqdm(enumerate(dataloader)):
+
+        for step, batch in tqdm(enumerate(dataloader, start=start_step)):
             loss = trainer.train_step(step=step, batch=batch)
 
             # 因为会有多个进程，并且gradient是在backward之后才能汇总起来
@@ -428,9 +333,14 @@ class DistributedGPTTrainer:
         if self.rank != 0:
             return
 
-        checkpoint: dict[str, Any] = trainer.get_state_dict(step=step)
-        checkpoint["dataloader"] = gathered_dataloader_state
-        checkpoint["config"] = self.config
+        checkpoint = Checkpoint(
+            config=self.config,
+            **trainer.get_state_dict(step=step),
+            dataloader=gathered_dataloader_state,
+        )
+        checkpoint.save(
+            path=defs.get_ckpt_path(project=self.config.wandb.project, step=step)
+        )
 
         # config = checkpoint.load_config()
 
@@ -438,7 +348,7 @@ class DistributedGPTTrainer:
         # 应该是不需要在配置里面写上路径的
         # 需要在在.cache/checkpoint_1000.pt ?
         # 那如果是多次训练呢？
-        torch.save(
-            checkpoint,
-            defs.get_ckpt_path(project=self.config.wandb.project, step=step),
-        )
+        # torch.save(
+        #     checkpoint,
+        #     defs.get_ckpt_path(project=self.config.wandb.project, step=step),
+        # )

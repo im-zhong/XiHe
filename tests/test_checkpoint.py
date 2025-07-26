@@ -43,5 +43,5 @@ def test_checkpoint() -> None:
     assert loaded_checkpoint.get_dataloader_state_dict(
         0
     ) == checkpoint.get_dataloader_state_dict(0)
-    assert loaded_checkpoint.step == checkpoint.step
+    assert loaded_checkpoint.get_step() == checkpoint.get_step()
     assert loaded_checkpoint.get_state_dict() == checkpoint.get_state_dict()

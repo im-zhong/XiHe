@@ -87,6 +87,9 @@ class Checkpoint:
     def get_grad_scaler_state_dict(self) -> dict[str, Any]:
         return self.grad_scaler
 
+    def get_step(self) -> int:
+        return self.step
+
 
 # 还得再写一个工厂函数
 # 就是load_checkpoint

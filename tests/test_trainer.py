@@ -20,6 +20,7 @@ from xihe.settings import Config
 from tests.common import generate_testing_config
 from xihe.trainer import DistributedGPTTrainer
 from xihe.defs import defs
+from xihe.ckpt import Checkpoint, load_ckpt_from_path
 
 
 def test_basic_gpt_trainer():
@@ -141,15 +142,17 @@ def test_distributed_trainer_from_scratch():
         config=config,  # Pass the config directly
     )
 
-    trainer.train_from_scratch(rank=rank, world_size=world_size, config=config)
+    trainer.train(config=config)
 
 
+# TODO: 怎么model的state dict出错了呢？
 def test_distributed_trainer_from_ckpt():
-    checkpoint = torch.load(defs.get_ckpt_path(project="test", step=10))
+    ckpt_path = defs.get_ckpt_path(project="myllm-pretrain-test", step=10)
+    checkpoint = load_ckpt_from_path(ckpt_path)
     # get xxx state
     # 我感觉还是给封装一下比较好吧
     # 做一个Checkpoint
-    config: Config = checkpoint["config"]
+    config: Config = checkpoint.get_config()
 
     rank = 0
     world_size = 1
@@ -162,8 +165,6 @@ def test_distributed_trainer_from_ckpt():
 
     # TODO: just finish this function, we are almost done!
     trainer.train(
-        rank=rank,
-        world_size=world_size,
         config=config,  # Pass the config directly
-        checkpoint=checkpoint,  # Load from the checkpoint
+        ckpt=checkpoint,  # Load from the checkpoint
     )
