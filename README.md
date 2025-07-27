@@ -31,7 +31,11 @@ My LLM.
 6. 2025/7/27
    1. [x] 确认dataloader的实现是正确的，需要给出几个简单的dataset的例子，然后走我们自己的数据处理管线，看看是否正确
    2. [x] 加上ruff等各种静态检查工具, pre-commit, mypy等
-   3. [ ] 确认Trainer的实现是正确的，包括amp，ddp等
-   4. [ ] 实现各种metrics的统计，比如处理token的速率等等
-   5. [ ] 确定XiHe 120M 模型的各种参数
-   6. [ ] 开始模型分布式训练！<https://docs.pytorch.org/tutorials/intermediate/ddp_series_minGPT.html> 又找到一个代码参考源，不过这个也是咱们写完之后对答案用吧
+   3. [x] 确认Trainer的实现是正确的，包括amp，ddp等
+   4. [x] 实现各种metrics的统计，比如处理token的速率等等
+   5. [x] redesign chekcpoint
+7. 2025/7/28
+   1. [ ] add unit test for checkpoint
+   2. [ ] 最终确认所有测试用例通过
+   3. [ ] 确定XiHe 120M 模型的各种参数
+   4. [ ] 开始模型分布式训练！<https://docs.pytorch.org/tutorials/intermediate/ddp_series_minGPT.html> 又找到一个代码参考源，不过这个也是咱们写完之后对答案用吧
