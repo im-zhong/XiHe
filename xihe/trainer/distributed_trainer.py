@@ -203,6 +203,7 @@ class DistributedGPTTrainer:
         start_step = ckpt.get_step() if ckpt else 0
         # Start training
         self.train_loop(
+            start_step=start_step,
             model=model,
             dataloader=dataloader,
             trainer=trainer,
