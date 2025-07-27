@@ -151,13 +151,18 @@ def calculate_sampling_probabilities(
     dataset_builders: list[DatasetBuilder] = [
         load_dataset_builder(path=path, name=name) for path, name in zip(pathes, names)
     ]
-    dataset_sizes: list[int | None] = [
-        dataset_builder.info.size_in_bytes for dataset_builder in dataset_builders
-    ]
-    if None in dataset_sizes:
-        raise ValueError(
-            "Some dataset sizes are None. Please check the dataset paths and names."
-        )
+    dataset_sizes: list[int] = []
+    for dataset_builder in dataset_builders:
+        if dataset_builder.info.size_in_bytes is None:
+            # 如果size_in_bytes为None，说明数据集无法通过builder获取大小
+            # 直接报异常
+            raise ValueError(
+                f"Dataset {dataset_builder.info.dataset_name} size is not available."
+            )
+        dataset_sizes.append(dataset_builder.info.size_in_bytes)
+
+    # 如果数据集无法通过builder获取大小
+    # 直接报异常就行了
 
     # 返回的长度应该和dataset_configs的长度一致
     total_size: int = sum(
@@ -177,7 +182,7 @@ def calculate_sampling_probabilities(
 # 可以先实现一个简单的函数
 # 根据一个DatasetConfig返回一个Dataset
 def create_dataset(
-    path: str, name: str, split: str, streaming: bool, num_shards: int = 1
+    path: str, name: str, split: str, streaming: bool = True, num_shards: int = 1
 ) -> IterableDataset:
     # 因为我们需要对数据进行预处理
     # 所以实际上只有我们实验过的数据集才可以使用

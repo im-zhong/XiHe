@@ -13,6 +13,7 @@ from tests.common import generate_testing_config
 from xihe.trainer import DistributedGPTTrainer
 from xihe.defs import defs
 from xihe.ckpt import load_ckpt_from_path
+from torch.amp.grad_scaler import GradScaler
 
 
 def test_basic_gpt_trainer():
@@ -91,7 +92,7 @@ def test_basic_gpt_trainer():
     )
     print(f"LR Scheduler: {lr_scheduler}")
 
-    grad_scaler = torch.amp.GradScaler()  # Enable mixed precision training
+    grad_scaler = GradScaler()  # Enable mixed precision training
 
     trainer = BasicGPTTrainer(
         vocab_size=tokenizer.vocab_size,

@@ -7,11 +7,7 @@
 # 之后再换成我们自己train出来的
 
 
-from datasets import (
-    Dataset,
-    IterableDataset,
-    interleave_datasets,
-)
+from datasets import IterableDataset, interleave_datasets
 
 import multiprocessing
 from torch.utils.data import DataLoader
@@ -25,7 +21,7 @@ from torchdata.stateful_dataloader import StatefulDataLoader
 class PackingDataset:
     def __init__(
         self,
-        datasets: list[Dataset | IterableDataset],
+        datasets: list[IterableDataset],
         tokenizer: PreTrainedTokenizer,
         sampling_probabilities: list[float],
         shuffle=True,
@@ -47,12 +43,15 @@ class PackingDataset:
         self.shuffle = shuffle
         self.tokenizer = tokenizer
         # self.batch_size = batch_size
+        # 这样写对吗？
+        eos_token = tokenizer.eos_token
+        assert isinstance(eos_token, str), "EOS token should be a string"
 
-        self.eos_token_id = self.tokenizer.encode(tokenizer.eos_token)[0]
+        self.eos_token_id: int = self.tokenizer.encode(text=eos_token)[0]
         # 检查比例是否正确
 
         # 咱们就用一半的核心吧
-        self.num_procs = multiprocessing.cpu_count() // 2
+        self.num_procs: int = multiprocessing.cpu_count() // 2
 
     # 首先混合所有的数据集，并提出去所有的需要做预训练的文本到text这个字段
 
@@ -223,5 +222,7 @@ class PackingDataset:
         #     context_length=context_length, rank=rank, world_size=world_size
         # )
         return StatefulDataLoader(
-            dataset=dataset, batch_size=batch_size, drop_last=True
+            dataset=dataset,  # type: ignore
+            batch_size=batch_size,
+            drop_last=True,
         )

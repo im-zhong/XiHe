@@ -85,9 +85,9 @@ def generate_testing_config() -> Config:
             hidden_size=768,
             num_heads=12,
             intermediate_size=3072,
-            dtype="float32",
+            # dtype="float32",
             mixed_precision=False,
-            low_precision_dtype="bfloat16",
+            # low_precision_dtype="bfloat16",
         ),
         tokenizer=TokenizerConfig(
             tokenizer_name="gpt2",

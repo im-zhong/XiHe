@@ -11,6 +11,7 @@ from wandb.sdk.wandb_run import Run
 from typing import Any
 from torch.amp.grad_scaler import GradScaler
 from torch.nn.parallel import DistributedDataParallel as DDP
+from xihe.model import Transformer
 
 
 # TODO: 更名为 CausalLLMTrainer or GPTTrainer
@@ -20,7 +21,7 @@ class BasicGPTTrainer:
     def __init__(
         self,
         vocab_size: int,
-        model: DDP,
+        model: Transformer | DDP,
         # settings: ModelConfig,
         optimizer: Optimizer,
         scheduler: LambdaLR,
@@ -124,6 +125,17 @@ class BasicGPTTrainer:
         #     self.save_model()
         return loss_item
 
+    def get_model_state_dict(self) -> dict[str, Any]:
+        match self.model:
+            case DDP():
+                # If model is wrapped in DDP, we need to access the underlying model
+                return self.model.module.state_dict()
+            case Transformer():
+                # If model is a Transformer, we can directly return its state dict
+                return self.model.state_dict()
+            case _:
+                raise TypeError("Unsupported model type for state dict retrieval.")
+
     def get_state_dict(self, step: int) -> dict[str, Any]:
         # only rank 0 should save the checkpoint
         # save the model, optimizer, scheduler, scaler, and config
@@ -140,7 +152,7 @@ class BasicGPTTrainer:
 
         checkpoint = {
             # 保存时如果是在 DDP 环境中，最好用 model.module.state_dict() 保存（而不是直接 model.state_dict()），这样就不会带 "module." 前缀。
-            "model": self.model.module.state_dict(),
+            "model": self.get_model_state_dict(),
             "optimizer": self.optimizer.state_dict(),
             "scheduler": self.scheduler.state_dict(),
             "grad_scaler": self.grad_scaler.state_dict(),

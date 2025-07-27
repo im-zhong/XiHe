@@ -14,7 +14,9 @@ from pathlib import Path
 import argparse
 import torch
 from xihe.settings import Config
-import torch.multiprocessing as mp  # torch.multiprocessing is a PyTorch wrapper around Python’s native multiprocessing
+
+# import torch.multiprocessing as mp  # torch.multiprocessing is a PyTorch wrapper around Python’s native multiprocessing
+from torch.multiprocessing.spawn import spawn
 from xihe.ckpt import Checkpoint, load_ckpt_from_path
 
 
@@ -64,15 +66,15 @@ if __name__ == "__main__":
     # 一个是train_from_scratch，一个是train_from_checkpoint
     if conf_file is not None:
         config = load_config(conf_file)
-        mp.spawn(
+        spawn(
             train_from_scratch,
             args=(world_size, config),
             nprocs=world_size,
             join=True,
         )
-    else:
+    elif ckpt_dir is not None:
         checkpoint: Checkpoint = load_ckpt_from_path(ckpt_dir)
-        mp.spawn(
+        spawn(
             train_from_checkpoint,
             args=(world_size, checkpoint),
             nprocs=world_size,

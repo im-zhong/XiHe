@@ -25,6 +25,7 @@ def test_create_dataset() -> None:
         path="wikimedia/wikipedia",
         name="20231101.en",
         split="train[:1024]",
+        streaming=True,
     )
     print(dataset)
 
@@ -100,7 +101,7 @@ def test_distributed_sampler() -> None:
         sampling_probabilities=[0.5, 0.5],
     )
     dataset = packing_dataset.to_torch_dataset(
-        batch_size=8,
+        # batch_size=8,
         context_length=1024,
     )
     # 为了测试，显式的设置world_size为4
@@ -125,7 +126,7 @@ def test_distributed_sampler() -> None:
     # 就是不用这个dist sampler了
     # sampler = DistributedSampler(dataset, num_replicas=4, rank=rank)
     dataloader = DataLoader(
-        dataset=dataset,
+        dataset=dataset,  # type: ignore
         batch_size=8,
         # sampler=sampler,
     )
@@ -145,6 +146,7 @@ def test_iterable_dataset_resume() -> None:
     iterable_dataset = Dataset.from_dict({"a": range(6)}).to_iterable_dataset(
         num_shards=3
     )
+    state_dict: dict[str, Any] = {}
     for idx, example in enumerate(iterable_dataset):
         print(example)
         if idx == 2:
@@ -175,7 +177,7 @@ def test_stateful_dataloader() -> None:
     iterable_dataset = Dataset.from_dict({"a": range(64)}).to_iterable_dataset(
         num_shards=4
     )
-    dataloader = StatefulDataLoader(iterable_dataset, batch_size=4, num_workers=4)
+    dataloader = StatefulDataLoader(iterable_dataset, batch_size=4, num_workers=4)  # type: ignore
 
     state_dict: dict[str, Any] = {}
     for idx, batch in enumerate(dataloader):
@@ -185,7 +187,7 @@ def test_stateful_dataloader() -> None:
             print("checkpoint")
             break
 
-    dataloader = StatefulDataLoader(iterable_dataset, batch_size=4, num_workers=4)
+    dataloader = StatefulDataLoader(iterable_dataset, batch_size=4, num_workers=4)  # type: ignore
     dataloader.load_state_dict(state_dict)
     print("restart from checkpoint")
     for idx, batch in enumerate(dataloader):

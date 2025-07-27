@@ -329,6 +329,9 @@ class DistributedGPTTrainer:
         if self.rank != 0:
             return
 
+        assert gathered_dataloader_state is not None, (
+            "Dataloader state should not be None"
+        )
         checkpoint = Checkpoint(
             config=self.config,
             **trainer.get_state_dict(step=step),
