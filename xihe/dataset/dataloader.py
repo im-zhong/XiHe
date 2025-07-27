@@ -7,13 +7,15 @@
 # 之后再换成我们自己train出来的
 
 
-from datasets import IterableDataset, interleave_datasets
-
 import multiprocessing
-from torch.utils.data import DataLoader
-from transformers.tokenization_utils import PreTrainedTokenizer
+from typing import Any
+
+from datasets import IterableDataset, interleave_datasets
 from datasets.distributed import split_dataset_by_node
+from torch.utils.data import DataLoader
 from torchdata.stateful_dataloader import StatefulDataLoader
+from transformers.tokenization_utils import PreTrainedTokenizer
+from transformers.tokenization_utils_base import BatchEncoding
 
 
 # tokenizer 应该有外部传入 减少依赖
@@ -24,8 +26,8 @@ class PackingDataset:
         datasets: list[IterableDataset],
         tokenizer: PreTrainedTokenizer,
         sampling_probabilities: list[float],
-        shuffle=True,
-    ):
+        # shuffle=True,
+    ) -> None:
         # self.dataset_configs = dataset_configs
         self.datasets = datasets
         self.sampling_probabilities = sampling_probabilities
@@ -37,10 +39,11 @@ class PackingDataset:
         # else:
         #     self.sample_probabilities = sample_probabilities
         if sum(self.sampling_probabilities) != 1.0:
-            raise ValueError("Ratios must sum to 1.0")
+            msg = "Ratios must sum to 1.0"
+            raise ValueError(msg)
 
         # self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
-        self.shuffle = shuffle
+        # self.shuffle = shuffle
         self.tokenizer = tokenizer
         # self.batch_size = batch_size
         # 这样写对吗？
@@ -55,10 +58,12 @@ class PackingDataset:
 
     # 首先混合所有的数据集，并提出去所有的需要做预训练的文本到text这个字段
 
-    def tokenize(self, examples):
+    def tokenize(self, examples: dict[str, Any]) -> BatchEncoding:
         return self.tokenizer(examples["text"])
 
-    def pack(self, examples, context_length: int):
+    def pack(
+        self, examples: dict[str, Any], context_length: int
+    ) -> dict[str, list[list[int]]]:
         # 这里的examples是一个batch
         # 我们需要把每个example的tokens拼接起来
         # 然后切分为1024的长度
@@ -76,9 +81,13 @@ class PackingDataset:
         print(f"Packed input IDs length: {len(packed_input_ids)}")
         # 然后切分成1024的长度
         # 最后一行，如果不足1024，就不要了。
-        cutted_packed_input_ids: list[list[int]] = []
-        for i in range(0, len(packed_input_ids), context_length):
-            cutted_packed_input_ids.append(packed_input_ids[i : i + context_length])
+        cutted_packed_input_ids: list[list[int]] = [
+            packed_input_ids[i : i + context_length]
+            for i in range(0, len(packed_input_ids), context_length)
+        ]
+        # for i in range(0, len(packed_input_ids), context_length):
+        #     cutted_packed_input_ids.append(packed_input_ids[i : i + context_length])
+
         # 去掉最后一个
         if len(cutted_packed_input_ids[-1]) < context_length:
             cutted_packed_input_ids.pop(-1)
@@ -91,8 +100,8 @@ class PackingDataset:
 
         return {"packed_input_ids": cutted_packed_input_ids}
 
-    def get_interleaved_dataset(self):
-        interleaved_dataset = interleave_datasets(
+    def get_interleaved_dataset(self) -> IterableDataset:
+        return interleave_datasets(
             datasets=self.datasets,  # type: ignore
             probabilities=self.sampling_probabilities,
             # TODO: 这个种子是必须设置的
@@ -100,16 +109,13 @@ class PackingDataset:
             seed=42,  # 设置随机种子以确保可重复性
             stopping_strategy="all_exhausted",  # 当所有数据集都被耗尽时停止
         )
-        return interleaved_dataset
 
-    def get_tokenized_dataset(self):
-        interleaved_dataset = self.get_interleaved_dataset()
-        tokenized_dataset = interleaved_dataset.map(
-            self.tokenize, batched=True, remove_columns=["text"]
+    def get_tokenized_dataset(self) -> IterableDataset:
+        return self.get_interleaved_dataset().map(
+            function=self.tokenize, batched=True, remove_columns=["text"]
         )
-        return tokenized_dataset
 
-    def get_packed_dataset(self, context_length: int):
+    def get_packed_dataset(self, context_length: int) -> IterableDataset:
         tokenized_dataset = self.get_tokenized_dataset()
         packed_dataset = tokenized_dataset.map(
             self.pack,
@@ -118,19 +124,20 @@ class PackingDataset:
             # https://huggingface.co/docs/datasets/v4.0.0/en/package_reference/main_classes#datasets.Dataset.map.fn_kwargs
             fn_kwargs={"context_length": context_length},
         )
-        packed_dataset = packed_dataset.rename_column("packed_input_ids", "input_ids")
-        return packed_dataset
+        return packed_dataset.rename_column("packed_input_ids", "input_ids")
 
-    def get_splited_dataset(self, context_length: int, rank: int, world_size: int):
+    def get_splited_dataset(
+        self, context_length: int, rank: int, world_size: int
+    ) -> IterableDataset:
         packed_dataset = self.get_packed_dataset(context_length=context_length)
         # 这里我们需要把数据集分成world_size份
         # 每一份的rank是rank
-        splited_dataset = split_dataset_by_node(
+        return split_dataset_by_node(
             packed_dataset,
             rank=rank,
             world_size=world_size,
         )
-        return splited_dataset
+        # return splited_dataset
 
     # len 和 getitem不需要自己写
     # 我们就写一个get_dataset就行了
@@ -179,7 +186,7 @@ class PackingDataset:
             batch_size=batch_size,
         )
 
-    def to_torch_dataset(self, context_length: int):
+    def to_torch_dataset(self, context_length: int) -> IterableDataset:
         interleaved_dataset = interleave_datasets(
             datasets=self.datasets,  # type: ignore
             probabilities=self.sampling_probabilities,
@@ -199,11 +206,13 @@ class PackingDataset:
             # https://huggingface.co/docs/datasets/v4.0.0/en/package_reference/main_classes#datasets.Dataset.map.fn_kwargs
             fn_kwargs={"context_length": context_length},
         )
-        packed_dataset = packed_dataset.rename_column("packed_input_ids", "input_ids")
+        return packed_dataset.rename_column("packed_input_ids", "input_ids")
         # return packed_dataset.with_format("torch")
-        return packed_dataset
+        # return packed_dataset
 
-    def to_distributed_dataset(self, context_length, rank: int, world_size: int):
+    def to_distributed_dataset(
+        self, context_length: int, rank: int, world_size: int
+    ) -> IterableDataset:
         dataset = self.to_torch_dataset(context_length)
         dataset = split_dataset_by_node(
             dataset,

@@ -2,7 +2,6 @@
 # zhangzhong
 
 from pathlib import Path
-import os
 
 
 class Defs:
@@ -16,7 +15,7 @@ class Defs:
 
     def get_ckpt_path(self, project: str, step: int) -> Path:
         project_dir = self.ckpt_dir / project
-        os.makedirs(name=project_dir, exist_ok=True)
+        project_dir.mkdir(parents=True, exist_ok=True)
         return project_dir / f"ckpt_{step}.tar"
 
 

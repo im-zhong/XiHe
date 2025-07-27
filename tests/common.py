@@ -4,15 +4,14 @@
 
 from xihe.settings import (
     Config,
-    WandbConfig,
-    DatasetArgs,
     DataLoaderConfig,
-    TokenizerConfig,
+    DatasetArgs,
     ModelConfig,
-    TrainerConfig,
     OptimizerConfig,
+    TokenizerConfig,
+    TrainerConfig,
+    WandbConfig,
 )
-
 
 # [dataloader]
 # sampling_probabilities = [0.5, 0.5]

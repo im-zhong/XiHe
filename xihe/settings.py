@@ -20,23 +20,21 @@
 
 
 import tomllib
-
-from pydantic import BaseModel, Field
 from pathlib import Path
-from typing import Any
-
 
 # ckpt1000.tar
 # checkpoint1000.tar
 # ckpt_1000.tar
 # ckpt-1000.tar
 #
-
 # 这个不能叫做ModelConfig
 # 我们还有TrainerConfig
 # EvalConfig 等等的东西
 # 还有就是这个东西
-from typing import Literal
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field
+
 from xihe.schemas import DatasetArgs
 
 
@@ -97,7 +95,7 @@ class ModelConfig(BaseModel):
     #     description="Data type for model parameters. Default is 'float32'.",
     # )
     mixed_precision: bool = Field(
-        False,
+        default=False,
         description="Whether to use mixed precision training. Default is False.",
     )
     # low_precision_dtype: str = Field(
@@ -155,7 +153,7 @@ def load_config(conf_file: Path) -> Config:
     Returns:
         ModelConfig: An instance of ModelConfig with the loaded parameters.
     """
-    with open(file=conf_file, mode="rb") as f:
+    with conf_file.open("rb") as f:
         config_data: dict[str, Any] = tomllib.load(f)
     return Config(**config_data)
 

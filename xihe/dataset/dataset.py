@@ -7,15 +7,17 @@
 # 之后再换成我们自己train出来的
 
 
-from datasets import (
-    load_dataset,
-    IterableDataset,
-    Dataset,
-    load_dataset_builder,
-    DatasetBuilder,
-)
-
+from collections.abc import Callable
 from enum import StrEnum
+from typing import Any
+
+from datasets import (
+    Dataset,
+    DatasetBuilder,
+    IterableDataset,
+    load_dataset,
+    load_dataset_builder,
+)
 
 
 # 一共有三个东西！
@@ -36,9 +38,9 @@ class DatasetInfo:
         self,
         # name: str | None,
         # size: int,
-        preprocess_fn,
+        preprocess_fn: Callable[..., dict[str, Any]],
         # features: list[str] = [],
-    ):
+    ) -> None:
         # self.name = name
         # self.size = size
         # self.features = features
@@ -95,7 +97,9 @@ dataset_infos: dict[DatasetEnum, DatasetInfo] = {
         preprocess_fn=lambda examples: {
             "text": [
                 f"{prompt} {response}".strip()
-                for prompt, response in zip(examples["prompt"], examples["response"])
+                for prompt, response in zip(
+                    examples["prompt"], examples["response"], strict=False
+                )
             ]
         },
     ),
@@ -115,7 +119,7 @@ dataset_infos: dict[DatasetEnum, DatasetInfo] = {
             "text": [
                 f"{instruction} {response}".strip()
                 for instruction, response in zip(
-                    examples["INSTRUCTION"], examples["RESPONSE"]
+                    examples["INSTRUCTION"], examples["RESPONSE"], strict=False
                 )
             ]
         },
@@ -149,16 +153,16 @@ def calculate_sampling_probabilities(
     # 那就没必要写这个东西了
 
     dataset_builders: list[DatasetBuilder] = [
-        load_dataset_builder(path=path, name=name) for path, name in zip(pathes, names)
+        load_dataset_builder(path=path, name=name)
+        for path, name in zip(pathes, names, strict=False)
     ]
     dataset_sizes: list[int] = []
     for dataset_builder in dataset_builders:
         if dataset_builder.info.size_in_bytes is None:
             # 如果size_in_bytes为None，说明数据集无法通过builder获取大小
             # 直接报异常
-            raise ValueError(
-                f"Dataset {dataset_builder.info.dataset_name} size is not available."
-            )
+            msg = f"Dataset {dataset_builder.info.dataset_name} size is not available."
+            raise ValueError(msg)
         dataset_sizes.append(dataset_builder.info.size_in_bytes)
 
     # 如果数据集无法通过builder获取大小
@@ -166,11 +170,12 @@ def calculate_sampling_probabilities(
 
     # 返回的长度应该和dataset_configs的长度一致
     total_size: int = sum(
-        size * num_epoch for size, num_epoch in zip(dataset_sizes, num_epochs)
+        size * num_epoch
+        for size, num_epoch in zip(dataset_sizes, num_epochs, strict=False)
     )
     sampling_probabilities: list[float] = [
         (size * num_epoch) / total_size
-        for size, num_epoch in zip(dataset_sizes, num_epochs)
+        for size, num_epoch in zip(dataset_sizes, num_epochs, strict=False)
     ]
     return sampling_probabilities
 
@@ -182,7 +187,11 @@ def calculate_sampling_probabilities(
 # 可以先实现一个简单的函数
 # 根据一个DatasetConfig返回一个Dataset
 def create_dataset(
-    path: str, name: str, split: str, streaming: bool = True, num_shards: int = 1
+    path: str,
+    name: str,
+    split: str,
+    streaming: bool = True,  # noqa: FBT001, FBT002
+    num_shards: int = 1,
 ) -> IterableDataset:
     # 因为我们需要对数据进行预处理
     # 所以实际上只有我们实验过的数据集才可以使用
@@ -216,7 +225,7 @@ def create_dataset(
     # 预处理数据集
     # 要不预处理这一步，不变成iterable了吧
     # 这里应该对于streaming和local的数据的处理方式是不同的
-    preprocessed_dataset = dataset.map(
+    return dataset.map(
         function=dataset_infos[DatasetEnum(path)].preprocess_fn,
         batched=True,
         batch_size=4096,
@@ -224,4 +233,3 @@ def create_dataset(
         # num_proc=self.num_procs,  # 使用多核处理
         remove_columns=dataset.column_names,
     )
-    return preprocessed_dataset

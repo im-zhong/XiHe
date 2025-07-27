@@ -6,8 +6,8 @@ from pathlib import Path
 from typing import Any
 
 import torch
+
 from xihe.settings import Config
-import os
 
 # 需要保存的东西
 # model
@@ -32,7 +32,7 @@ class Checkpoint:
     # 为了强制保存所有应该保存的东西
     # 这里应该把所有应该保存的东西都列出来
     # 然后必须要保证名字和dict里面的名字是一样的
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         config: Config,
         model: dict[str, Any],
@@ -50,8 +50,8 @@ class Checkpoint:
         self.step = step
         self.dataloader = dataloader
 
-    def save(self, path: Path):
-        os.makedirs(path.parent, exist_ok=True)
+    def save(self, path: Path) -> None:
+        path.mkdir(exist_ok=True, parents=True)
         torch.save(self.get_state_dict(), path)
 
     # 只需要定义一组key即可

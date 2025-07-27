@@ -14,7 +14,7 @@ class DatasetArgs(BaseModel):
     split: str = Field(..., description="Dataset split =")
     num_epochs: int = Field(..., description="Number of epochs for training.")
     streaming: bool = Field(
-        False,
+        default=False,
         description="Whether to use streaming mode for the dataset.",
     )
     # 所以这个to_iterable参数是多余的

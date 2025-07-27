@@ -2,8 +2,9 @@
 # zhangzhong
 
 
-from xihe.settings import load_config
 from pathlib import Path
+
+from xihe.settings import load_config
 
 
 def test_example_conf() -> None:

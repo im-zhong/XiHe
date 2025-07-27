@@ -1,8 +1,8 @@
 # 2025/7/26
 # zhangzhong
 
-from xihe.ckpt import Checkpoint, load_ckpt_from_path
 from tests.common import generate_testing_config
+from xihe.ckpt import Checkpoint, load_ckpt_from_path
 from xihe.defs import defs
 
 

@@ -6,18 +6,15 @@
 # 剩下的所有配置都写在配置文件里面就行了呗
 # 必要的时候，可以提供一些额外的参数，用来覆盖config里面的配置足够了
 
-from xihe.settings import load_config
-from xihe.trainer import (
-    DistributedGPTTrainer,
-)
-from pathlib import Path
 import argparse
-import torch
-from xihe.settings import Config
+from pathlib import Path
 
-# import torch.multiprocessing as mp  # torch.multiprocessing is a PyTorch wrapper around Python’s native multiprocessing
+import torch
 from torch.multiprocessing.spawn import spawn
+
 from xihe.ckpt import Checkpoint, load_ckpt_from_path
+from xihe.settings import Config, load_config
+from xihe.trainer import DistributedGPTTrainer
 
 
 # 这样整体上好一些

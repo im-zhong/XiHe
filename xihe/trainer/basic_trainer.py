@@ -3,14 +3,16 @@
 #
 
 # https://docs.pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.LambdaLR.html
-from torch.optim.lr_scheduler import LambdaLR
+from typing import Any
+
 import torch
 from torch import Tensor
-from torch.optim import Optimizer
-from wandb.sdk.wandb_run import Run
-from typing import Any
 from torch.amp.grad_scaler import GradScaler
-from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.nn.parallel import DistributedDataParallel
+from torch.optim import Optimizer
+from torch.optim.lr_scheduler import LambdaLR
+
+from wandb.sdk.wandb_run import Run
 from xihe.model import Transformer
 
 
@@ -18,10 +20,10 @@ from xihe.model import Transformer
 # 把rank放在参数里面吧
 # 还有所有需要用的实例
 class BasicGPTTrainer:
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         vocab_size: int,
-        model: Transformer | DDP,
+        model: Transformer | DistributedDataParallel,
         # settings: ModelConfig,
         optimizer: Optimizer,
         scheduler: LambdaLR,
@@ -38,7 +40,7 @@ class BasicGPTTrainer:
         # 如果optimizer之前绑定了模型的参数
         # 然后模型又to cuda了，这样写是不是不对的？
         # 果然是不对的，
-    ):
+    ) -> None:
         self.vocab_size = vocab_size
         # self.config = settings
         # Initialize model, tokenizer, optimizer, etc. based on the config
@@ -57,7 +59,7 @@ class BasicGPTTrainer:
         self.world_size = world_size
         self.loss_fn = torch.nn.CrossEntropyLoss()
 
-    def train_step(self, step: int, batch: dict[str, Tensor]):
+    def train_step(self, batch: dict[str, Tensor]) -> float:
         self.optimizer.zero_grad()
 
         # 因为咱也没有支持bfloat16的设置，所以就不进行配置了
@@ -88,7 +90,7 @@ class BasicGPTTrainer:
                 shifted_labels.view(-1),
             )
 
-        loss_item = loss.item()
+        loss_item = float(loss.item())
 
         # Scales loss. Calls ``backward()`` on scaled loss to create scaled gradients.
         self.grad_scaler.scale(loss).backward()
@@ -127,14 +129,15 @@ class BasicGPTTrainer:
 
     def get_model_state_dict(self) -> dict[str, Any]:
         match self.model:
-            case DDP():
+            case DistributedDataParallel():
                 # If model is wrapped in DDP, we need to access the underlying model
                 return self.model.module.state_dict()
             case Transformer():
                 # If model is a Transformer, we can directly return its state dict
                 return self.model.state_dict()
             case _:
-                raise TypeError("Unsupported model type for state dict retrieval.")
+                msg = "Unsupported model type for state dict retrieval."
+                raise ValueError(msg)
 
     def get_state_dict(self, step: int) -> dict[str, Any]:
         # only rank 0 should save the checkpoint
@@ -150,7 +153,7 @@ class BasicGPTTrainer:
         #     obj=dataloader_state, object_gather_list=gathered_dataloader_state, dst=0
         # )
 
-        checkpoint = {
+        return {
             # 保存时如果是在 DDP 环境中，最好用 model.module.state_dict() 保存（而不是直接 model.state_dict()），这样就不会带 "module." 前缀。
             "model": self.get_model_state_dict(),
             "optimizer": self.optimizer.state_dict(),
@@ -165,7 +168,7 @@ class BasicGPTTrainer:
             # 没必要，所以不保存了
             # "rngom_state": get_all_rng_states(),
         }
-        return checkpoint
+        # return checkpoint
         # save the checkpoint to a file
         # 应该是不需要在配置里面写上路径的
         # 需要在在.cache/checkpoint_1000.pt ?

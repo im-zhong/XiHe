@@ -20,6 +20,31 @@ dependencies = [
     "wandb>=0.21.0",
 ]
 
+[tool.ruff]
+fix = true
+
+# 我感觉我应该选择一些比较好的规则
+# 不需要把项目给限制的这么极限
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "D",
+    "ERA",
+    "PGH",
+    "RUF003",
+    "E501",
+    "COM",
+    "FA102",
+    "T20",
+    "TD",
+    "FIX",
+    "BLE",
+    "S",
+    "G",
+    "TC",
+    "RUF001", # https://docs.astral.sh/ruff/rules/ambiguous-unicode-character-string/
+]
+
 # 现在服务器上的nvidia驱动版本比较低，先这样将就着吧，等代码写完了，升级一下驱动就好了
 [[tool.uv.index]]
 name = "pytorch-cu118"

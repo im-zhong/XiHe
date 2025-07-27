@@ -2,8 +2,8 @@
 # zhangzhong
 
 from xihe.dataset import create_dataloader
-from xihe.tokenizer import create_tokenizer
 from xihe.schemas import DatasetArgs
+from xihe.tokenizer import create_tokenizer
 
 
 def test_create_dataloader() -> None:

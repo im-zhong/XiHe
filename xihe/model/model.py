@@ -5,9 +5,8 @@
 # https://github.com/meta-llama/llama/blob/main/llama/model.py
 
 import torch
-
-import torch.nn.functional as F
-from torch import nn, Tensor
+import torch.nn.functional as func
+from torch import Tensor, nn
 
 
 # 既然如此，不如RMSNorm也自己写了吧
@@ -16,29 +15,29 @@ class RMSNorm(nn.Module):
     # 这个东西的实现才是真的可以参考LayerNorm
     # 因为这个东西就直接可以看作是LayerNorm在均值为零的时候的一个特例t
     def __init__(
-        self, normalized_shape: int, eps: float = 1e-6, device=None, dtype=None
+        self, normalized_shape: int, eps: float = 1e-6, device: str = "cpu"
     ) -> None:
         super().__init__()
         self.normalized_shape = normalized_shape
         self.eps = eps
         # 这个东西的scale是一个可学习的参数
-        self.scale = nn.Parameter(torch.ones(normalized_shape))
+        self.scale = nn.Parameter(torch.ones(normalized_shape, device=device))
 
-    def forward(self, input: Tensor) -> Tensor:
+    def forward(self, input_tensor: Tensor) -> Tensor:
         # output.shape == input.shape
         # 要做的事情其实就是先针对于最后一个维度计算
-        shape = input.shape
-        dim = input.shape[-1]
+        shape = input_tensor.shape
+        dim = input_tensor.shape[-1]
         if dim != self.normalized_shape:
-            raise ValueError(
-                f"Input shape {shape} does not match normalized shape {self.normalized_shape}!"
-            )
+            msg = f"Input shape {shape} does not match normalized shape {self.normalized_shape}!"
+            raise ValueError(msg)
         # 确实不需要这样做，因为我们只在最后一个维度上做
         # input = input.view(-1, dim)  # 保证是二维的
-        input = input * torch.rsqrt(input.pow(2).mean(dim=-1, keepdim=True) + self.eps)
-        output = input * self.scale  # .view(1, -1)  # shape = (batch_size, dim)
+        input_tensor = input_tensor * torch.rsqrt(
+            input_tensor.pow(2).mean(dim=-1, keepdim=True) + self.eps
+        )
+        return input_tensor * self.scale  # .view(1, -1)  # shape = (batch_size, dim)
         # output = input.view(shape)  # 恢复原来的形状
-        return output
 
 
 # ok！成功了25%了吧，大概
@@ -60,7 +59,7 @@ class RotaryPositionalEmbedding:
 
         # 计算R矩阵
         # shape = (max_seq_len, dim // 2, 2, 2)
-        cos_threa, sin_threa = self.calculate_R_matrix(dim, max_seq_len)
+        cos_threa, sin_threa = self.calculate_r_matrix(dim, max_seq_len)
         self.cos_threa = cos_threa.to(device)
         self.sin_threa = sin_threa.to(device)
         # self.cos_threa = cos_threa
@@ -70,11 +69,12 @@ class RotaryPositionalEmbedding:
     # 卧槽，忘了，还需要设置dtype，因为我们想要使用bfloat16
     # 我们不需要计算出整个矩阵，只需要计算出一个cos 一个sin的矩阵就行了
     # 维度是 max_seq_len, dim // 2
-    def calculate_R_matrix(
+    def calculate_r_matrix(
         self, dim: int, max_seq_len: int, base_freq: float = 10000
     ) -> tuple[Tensor, Tensor]:
         if dim % 2 != 0:
-            raise ValueError(f"dim {dim} must be even to apply RoPE!")
+            msg = f"dim {dim} must be even to apply RoPE!"
+            raise ValueError(msg)
         # d = dim // 2
         # 计算旋转矩阵
         # dim: 维度
@@ -126,19 +126,18 @@ class RotaryPositionalEmbedding:
         seq_len: int = tensor.shape[-2]
         # 还要保证传入的seq_len不能超过max_seq_len
         if seq_len > self.max_seq_len:
-            raise ValueError(
-                f"seq_len {seq_len} must be less than or equal to max_seq_len {self.max_seq_len} to apply RoPE!"
-            )
+            msg = f"seq_len {seq_len} must be less than or equal to max_seq_len {self.max_seq_len} to apply RoPE!"
+            raise ValueError(msg)
 
         dim: int = tensor.shape[-1]
         # 因为我们的旋转矩阵是预选计算的，所以我们必须保证传入的tensor的dim和初始化的dim是一致的
         if dim != self.dim:
-            raise ValueError(
-                f"dim {dim} must be equal to the initialized dim {self.dim} to apply RoPE!"
-            )
+            msg = f"dim {dim} must be equal to the initialized dim {self.dim} to apply RoPE!"
+            raise ValueError(msg)
         # the last dim must be even
         if dim % 2 != 0:
-            raise ValueError(f"dim {dim} must be even to apply RoPE!")
+            msg = f"dim {dim} must be even to apply RoPE!"
+            raise ValueError(msg)
 
         # x = tensor.view(-1, seq_len, dim)  # 保证tensor是三维的
         # x = x.view(-1, seq_len, dim // 2, 2)  # shape = (batch_size, seq_len, d, 2)
@@ -183,19 +182,21 @@ class MultiHeadSelfAttention(nn.Module):
     # 我们没必要区分query key 和value了
     # 我们就是self attention
 
-    def __init__(self, hidden_size: int, num_heads: int, dropout: float = 0.0):
+    def __init__(self, hidden_size: int, num_heads: int) -> None:
         super().__init__()
 
         # 参考PaLM 整个模型都没有bias
         if hidden_size % num_heads != 0:
-            raise ValueError(
+            msg = (
                 f"hidden_size {hidden_size} must be divisible by num_heads {num_heads}"
             )
+            raise ValueError(msg)
         self.num_heads: int = num_heads
         self.head_dim: int = hidden_size // num_heads
         # 因为要使用RoPE 所以head dim必须是偶数
         if self.head_dim % 2 != 0:
-            raise ValueError(f"head_dim {self.head_dim} must be even to apply RoPE!")
+            msg = f"head_dim {self.head_dim} must be even to apply RoPE!"
+            raise ValueError(msg)
 
         self.query_proj = nn.Linear(hidden_size, hidden_size, bias=False)
         self.key_proj = nn.Linear(hidden_size, hidden_size, bias=False)
@@ -206,7 +207,7 @@ class MultiHeadSelfAttention(nn.Module):
     # 大模型过拟合也没什么事情是吧 狠狠的拟合在数据上！！！
     def forward(
         self,
-        input: Tensor,
+        input_rensor: Tensor,
         rope: RotaryPositionalEmbedding | None = None,
         attention_mask: Tensor | None = None,
     ) -> Tensor:
@@ -216,13 +217,13 @@ class MultiHeadSelfAttention(nn.Module):
         # check the attn_mask args in MHA.forward
         # output: [batch_size, seq_len, hidden_size], output should be the same shape as input
 
-        batch_size, seq_len, hidden_size = input.shape
+        batch_size, seq_len, hidden_size = input_rensor.shape
         # 多头注意力的映射其实就是直接用一整个参数矩阵去映射，这个我之前的笔记里面应该有画图解释过
         # 而且llama和retriever的代码里都是这么做的，所以这样写就是对的
         # first, proj the input to q, k, v
-        query: Tensor = self.query_proj(input)
-        key: Tensor = self.key_proj(input)
-        value: Tensor = self.value_proj(input)
+        query: Tensor = self.query_proj(input_rensor)
+        key: Tensor = self.key_proj(input_rensor)
+        value: Tensor = self.value_proj(input_rensor)
 
         # 然后利用view把q, k, v的shape变成
         # batch_size, seq_len, head_dim -> batch_size, seq_len, num_heads, head_dim
@@ -261,9 +262,11 @@ class MultiHeadSelfAttention(nn.Module):
 
         # https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html
         if attention_mask is None:
-            output = F.scaled_dot_product_attention(query, key, value, is_causal=True)
+            output = func.scaled_dot_product_attention(
+                query, key, value, is_causal=True
+            )
         else:
-            output = F.scaled_dot_product_attention(
+            output = func.scaled_dot_product_attention(
                 query, key, value, attn_mask=attention_mask
             )
 
@@ -283,7 +286,7 @@ class MultiHeadSelfAttention(nn.Module):
 # 也就是有三个矩阵
 # 两个输入，一个输出
 class FeedForward(nn.Module):
-    def __init__(self, hidden_size: int, intermediate_size: int):
+    def __init__(self, hidden_size: int, intermediate_size: int) -> None:
         super().__init__()
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
@@ -295,9 +298,9 @@ class FeedForward(nn.Module):
 
         self.silu = nn.SiLU()
 
-    def forward(self, input: Tensor) -> Tensor:
-        x1 = self.silu(self.w1(input))
-        x2 = self.w2(input)
+    def forward(self, inx: Tensor) -> Tensor:
+        x1 = self.silu(self.w1(inx))
+        x2 = self.w2(inx)
         # 然后x1过silu
         # https://docs.pytorch.org/docs/stable/generated/torch.nn.SiLU.html
         x = x1 * x2
@@ -306,7 +309,9 @@ class FeedForward(nn.Module):
 
 # 这里要应用Pre-LN Transformer
 class TransformerBlock(nn.Module):
-    def __init__(self, hidden_size: int, num_heads: int, intermediate_size: int):
+    def __init__(
+        self, hidden_size: int, num_heads: int, intermediate_size: int
+    ) -> None:
         super().__init__()
 
         self.hidden_size = hidden_size
@@ -333,12 +338,12 @@ class TransformerBlock(nn.Module):
 
         # 先做自注意力
         h = x + self.attention(self.norm1(x), rope=rope, attention_mask=attention_mask)
-        y = h + self.ffn(self.norm2(h))
-        return y
+        return h + self.ffn(self.norm2(h))
+        # return y
 
 
 class Transformer(nn.Module):
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         vocab_size: int,
         hidden_size: int,
@@ -347,7 +352,7 @@ class Transformer(nn.Module):
         intermediate_size: int,
         device: str = "cpu",
         max_seq_len: int = 2048,
-    ):
+    ) -> None:
         super().__init__()
 
         self.vocab_size = vocab_size
@@ -402,6 +407,6 @@ class Transformer(nn.Module):
             x = layer(x, rope=self.rope)
         # output
         # llama还在模型的最后一层加了一个输出层
-        output = self.output(self.norm(x))
+        return self.output(self.norm(x))
         # output: [batch_size, seq_len, vocab_size]
-        return output
+        # return output

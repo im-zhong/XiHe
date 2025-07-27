@@ -1,16 +1,17 @@
 # 2025/7/19
 # zhangzhong
 
-from xihe.model import RotaryPositionalEmbedding, Transformer
+
 import torch
 from torch import Tensor, nn
-from typing import Tuple
+
 from xihe.model import RMSNorm as MyRMSNorm
+from xihe.model import RotaryPositionalEmbedding, Transformer
 
 
 # code from llama
 # https://github.com/meta-llama/llama/blob/main/llama/model.py
-def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0):
+def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0) -> Tensor:
     """
     Precompute the frequency tensor for complex exponentials (cis) with given dimensions.
 
@@ -41,11 +42,10 @@ def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0):
     # TIPs: 在我们自己的实现中，我们是使用了一个外层循环来做的，这里用outer计算的更快！
     freqs = torch.outer(t, freqs).float()  # type: ignore
     print("freqs.shape:", freqs.shape)
-    freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # complex64
-    return freqs_cis
+    return torch.polar(torch.ones_like(freqs), freqs)  # complex64
 
 
-def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor):
+def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor) -> Tensor:
     """
     Reshape frequency tensor for broadcasting it with another tensor.
 
@@ -64,7 +64,7 @@ def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor):
         AssertionError: If the target tensor 'x' doesn't have the expected number of dimensions.
     """
     ndim = x.ndim
-    assert 0 <= 1 < ndim
+    assert 0 <= 1 < ndim  # noqa: PLR0133
     assert freqs_cis.shape == (x.shape[1], x.shape[-1])
     shape = [d if i == 1 or i == ndim - 1 else 1 for i, d in enumerate(x.shape)]
     return freqs_cis.view(*shape)
@@ -74,7 +74,7 @@ def apply_rotary_emb(
     xq: torch.Tensor,
     xk: torch.Tensor,
     freqs_cis: torch.Tensor,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Apply rotary embeddings to input tensors using the given frequency tensor.
 
@@ -132,7 +132,6 @@ def test_rotary_matrices() -> None:
     xk = torch.randn(size=(4, seq_len, 8, dim))
     apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
 
-    #
     freqs_cis_real = torch.view_as_real(freqs_cis)
     assert freqs_cis_real.shape == (seq_len, dim // 2, 2)
 

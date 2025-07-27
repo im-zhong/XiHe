@@ -2,35 +2,38 @@
 # zhangzhong
 #
 
-from xihe.model import Transformer
+import os
+from typing import Any
+
+import torch
+import torch.distributed as dist
+from torch.amp.grad_scaler import GradScaler
+from torch.nn.parallel import DistributedDataParallel
+from torch.optim import Optimizer
 
 # https://docs.pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.LambdaLR.html
 from torch.optim.lr_scheduler import LambdaLR
-import torch
-from torch.optim import Optimizer
-from tqdm import tqdm
-from wandb.sdk.wandb_run import Run
-import os
-from torch.nn.parallel import DistributedDataParallel as DDP
 from torchdata.stateful_dataloader import StatefulDataLoader
-from xihe.optimizer import (
-    create_optimizer,
-    create_cosine_lr_scheduler,
-)
-from xihe.utils.wandb import init_wandb_run
-from .basic_trainer import BasicGPTTrainer
-from xihe.settings import Config
-from xihe.tokenizer import create_tokenizer
-from xihe.dataset import create_dataloader
-import torch.distributed as dist
-from typing import Any
-from xihe.defs import defs
+from tqdm import tqdm
+
+from wandb.sdk.wandb_run import Run
 
 # 我感觉也没必要整两个，因为我们就是从Config里面读出来的
 # 他们俩用一个就行了
 # config用schema就行了
 from xihe.ckpt import Checkpoint
-from torch.amp.grad_scaler import GradScaler
+from xihe.dataset import create_dataloader
+from xihe.defs import defs
+from xihe.model import Transformer
+from xihe.optimizer import (
+    create_cosine_lr_scheduler,
+    create_optimizer,
+)
+from xihe.settings import Config
+from xihe.tokenizer import create_tokenizer
+from xihe.utils.wandb import init_wandb_run
+
+from .basic_trainer import BasicGPTTrainer
 
 
 # TODO: 更名为 CausalLLMTrainer or GPTTrainer
@@ -101,11 +104,10 @@ class DistributedGPTTrainer:
     # 我有一个折衷的方案：就是把checkpoint作为可选参数放进来
     # 这样可以减少冗余的代码，这个函数就可以叫做train
     # 然后有一个内部函数叫做 train_loop 目前看来是比较合适的了
-    def train(self, config: Config, ckpt: Checkpoint | None = None):
+    def train(self, config: Config, ckpt: Checkpoint | None = None) -> None:
         if ckpt and config != ckpt.get_config():
-            raise ValueError(
-                "The provided checkpoint configuration does not match the current configuration."
-            )
+            msg = "The provided checkpoint configuration does not match the current configuration."
+            raise ValueError(msg)
 
         rank = self.rank
         world_size = self.world_size
@@ -158,7 +160,7 @@ class DistributedGPTTrainer:
             local_model.load_state_dict(ckpt.get_model_state_dict())
         local_model = local_model.to(config.trainer.device)
         # TODO: need to call init_process_group, but where?
-        model = DDP(module=local_model, device_ids=[rank])
+        model = DistributedDataParallel(module=local_model, device_ids=[rank])
 
         # 这里需要创建optimizer和scheduler
         # TODO: 这些东西都得重写，optimizer必须在模型的参数放在正确的设备上才能创建
@@ -210,15 +212,13 @@ class DistributedGPTTrainer:
             model=model,
             dataloader=dataloader,
             trainer=trainer,
-            rank=rank,
             scheduler=lr_scheduler,
-            world_size=world_size,
         )
 
         self.cleanup()
 
     # only work with nvidia GPUs
-    def setup(self, rank: int, world_size: int):
+    def setup(self, rank: int, world_size: int) -> None:
         os.environ["MASTER_ADDR"] = "localhost"
         os.environ["MASTER_PORT"] = "12355"
         torch.cuda.set_device(rank)
@@ -229,7 +229,7 @@ class DistributedGPTTrainer:
             world_size=world_size,
         )
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         torch.distributed.destroy_process_group()
 
     # 有一种让Trainer完全剥离ckpter的方法
@@ -244,13 +244,11 @@ class DistributedGPTTrainer:
     def train_loop(
         self,
         start_step: int,
-        model: DDP,
+        model: DistributedDataParallel,
         dataloader: StatefulDataLoader,
         trainer: BasicGPTTrainer,
         scheduler: LambdaLR,
-        rank: int,
-        world_size: int,
-    ):
+    ) -> None:
         # get trainer from
 
         # torch.amp.Scaler 需要需要保存状态呢？
@@ -269,7 +267,7 @@ class DistributedGPTTrainer:
         model.train()
 
         for step, batch in tqdm(enumerate(dataloader, start=start_step)):
-            loss = trainer.train_step(step=step, batch=batch)
+            loss: float = trainer.train_step(batch=batch)
 
             # 因为会有多个进程，并且gradient是在backward之后才能汇总起来
             # 所以loss只能按照rank来打印了 没法打印整体的
@@ -297,9 +295,7 @@ class DistributedGPTTrainer:
             #     self.save_checkpoint(step=step, trainer=trainer, dataloader=dataloader)
 
     # 算了，收集dataloader state extract a function
-    def get_dataloader_state(
-        self, dataloader: StatefulDataLoader, rank: int
-    ) -> list[Any] | None:
+    def get_dataloader_state(self, dataloader: StatefulDataLoader) -> list[Any] | None:
         # prepare local data
         dataloader_state = dataloader.state_dict()
 
@@ -319,12 +315,10 @@ class DistributedGPTTrainer:
 
     def save_checkpoint(
         self, step: int, trainer: BasicGPTTrainer, dataloader: StatefulDataLoader
-    ):
+    ) -> None:
         # only rank 0 should save the checkpoint
         # 先从其他节点哪里拿到dataloader
-        gathered_dataloader_state = self.get_dataloader_state(
-            dataloader=dataloader, rank=self.rank
-        )
+        gathered_dataloader_state = self.get_dataloader_state(dataloader=dataloader)
 
         if self.rank != 0:
             return

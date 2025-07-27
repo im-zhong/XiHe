@@ -3,13 +3,15 @@
 
 from torchdata.stateful_dataloader import StatefulDataLoader
 from transformers.tokenization_utils import PreTrainedTokenizer
-from .dataset import create_dataset, calculate_sampling_probabilities
-from .dataloader import PackingDataset
+
 from xihe.schemas import DatasetArgs
+
+from .dataloader import PackingDataset
+from .dataset import calculate_sampling_probabilities, create_dataset
 
 
 # 最好把对config的依赖给去掉
-def create_dataloader(
+def create_dataloader(  # noqa: PLR0913
     tokenizer: PreTrainedTokenizer,
     rank: int,
     batch_size: int,
@@ -47,10 +49,9 @@ def create_dataloader(
         tokenizer=tokenizer,
         sampling_probabilities=sampling_probabilities,
     )
-    dataloader = dataset.to_stateful_dataloader(
+    return dataset.to_stateful_dataloader(
         batch_size=batch_size,
         context_length=context_length,
         rank=rank,
         world_size=world_size,
     )
-    return dataloader

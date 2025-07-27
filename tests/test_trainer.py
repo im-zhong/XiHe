@@ -1,22 +1,22 @@
 # 2025/7/26
 # zhangzhong
 
-from xihe.trainer import BasicGPTTrainer
-from xihe.model import Transformer
-from xihe.optimizer import create_optimizer, create_cosine_lr_scheduler
-from torch.optim import Optimizer
-from xihe.tokenizer import create_tokenizer
-from torch.optim.lr_scheduler import LambdaLR
 import torch
-from xihe.settings import Config
-from tests.common import generate_testing_config
-from xihe.trainer import DistributedGPTTrainer
-from xihe.defs import defs
-from xihe.ckpt import load_ckpt_from_path
 from torch.amp.grad_scaler import GradScaler
+from torch.optim import Optimizer
+from torch.optim.lr_scheduler import LambdaLR
+
+from tests.common import generate_testing_config
+from xihe.ckpt import load_ckpt_from_path
+from xihe.defs import defs
+from xihe.model import Transformer
+from xihe.optimizer import create_cosine_lr_scheduler, create_optimizer
+from xihe.settings import Config
+from xihe.tokenizer import create_tokenizer
+from xihe.trainer import BasicGPTTrainer, DistributedGPTTrainer
 
 
-def test_basic_gpt_trainer():
+def test_basic_gpt_trainer() -> None:
     tokenizer = create_tokenizer("gpt2")
     print(f"Tokenizer: {tokenizer}")
 
@@ -108,7 +108,7 @@ def test_basic_gpt_trainer():
 
     # 不对啊，如果可以指定数据，为什么要引入dataloader呢？
     trainer.train_step(
-        step=0,
+        # step=0,
         batch={
             "input_ids": torch.randint(
                 0, tokenizer.vocab_size, (batch_size, context_length)
@@ -120,7 +120,7 @@ def test_basic_gpt_trainer():
     print(f"Trainer state dict: {state_dict}")
 
 
-def test_distributed_trainer_from_scratch():
+def test_distributed_trainer_from_scratch() -> None:
     # 那么这里就要先构造一个config对象
     # 咱们最好不要从example_conf来读
     # 就在这里构造一个config对象就行了 减少对外部的依赖
@@ -139,7 +139,7 @@ def test_distributed_trainer_from_scratch():
 
 
 # TODO: 怎么model的state dict出错了呢？
-def test_distributed_trainer_from_ckpt():
+def test_distributed_trainer_from_ckpt() -> None:
     ckpt_path = defs.get_ckpt_path(project="myllm-pretrain-test", step=10)
     checkpoint = load_ckpt_from_path(ckpt_path)
     # get xxx state

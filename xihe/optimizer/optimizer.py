@@ -3,12 +3,17 @@
 
 
 # use pytorch lambdaLR to impl custom learning rate scheduler
-from torch.optim import AdamW  # use this optimizer
+import math
+from collections.abc import Callable
+
+from torch.optim import (
+    Adam,
+    AdamW,  # use this optimizer
+    Optimizer,
+)
 
 # https://docs.pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.LambdaLR.html
 from torch.optim.lr_scheduler import LambdaLR
-import math
-from torch.optim import Optimizer, Adam
 from torch.optim.optimizer import ParamsT
 
 
@@ -17,10 +22,10 @@ def create_optimizer(
 ) -> Optimizer:
     if name.lower() == "adamw":
         return AdamW(params=parameters, lr=learning_rate, weight_decay=weight_decay)
-    elif name.lower() == "adam":
+    if name.lower() == "adam":
         return Adam(params=parameters, lr=learning_rate, weight_decay=weight_decay)
-    else:
-        raise ValueError(f"Unsupported optimizer: {name}")
+    msg = f"Unsupported optimizer: {name}"
+    raise ValueError(msg)
 
 
 def cosine_scheduler_with_warmup(
@@ -29,8 +34,8 @@ def cosine_scheduler_with_warmup(
     initial_lr: float,
     max_lr: float,
     final_lr: float,
-):
-    def lr_lambda(step: int):
+) -> Callable[..., float]:
+    def lr_lambda(step: int) -> float:
         if step < warmup_steps:
             return initial_lr + (max_lr - initial_lr) * step / warmup_steps
         # step >= lr
@@ -40,7 +45,7 @@ def cosine_scheduler_with_warmup(
     return lr_lambda
 
 
-def create_cosine_lr_scheduler(
+def create_cosine_lr_scheduler(  # noqa: PLR0913
     optimizer: Optimizer,
     warmup_steps: int,
     total_steps: int,

@@ -4,16 +4,16 @@
 # 用ipynb不方便测试，就直接生成图片就行了
 # 生成到cache里面就行，不用上传
 
-from torch.optim import Adam
+
 import matplotlib.pyplot as plt
 import torch
-import os
+from torch.optim import Adam
 
-
+from xihe.defs import defs
 from xihe.optimizer.optimizer import create_cosine_lr_scheduler
 
 
-def test_cosine_scheduler():
+def test_cosine_scheduler() -> None:
     # Parameters for the cosine scheduler
     total_steps = 100
     warmup_steps = 10
@@ -47,5 +47,5 @@ def test_cosine_scheduler():
     plt.grid()
 
     # Save the plot to a file
-    os.makedirs(".cache", exist_ok=True)
+    defs.cache_dir.mkdir(exist_ok=True)
     plt.savefig(".cache/cosine_scheduler_plot.png")

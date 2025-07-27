@@ -1,23 +1,25 @@
 # 2025/7/19
 # zhangzhong
 
-from xihe.dataset import (
-    PackingDataset,
-    create_dataset,
-    calculate_sampling_probabilities,
-)
-from typing import Any
-from transformers import AutoTokenizer
-from torch.utils.data import DataLoader
-import torch
 import os
+import random
+from typing import Any
+
+import torch
 from datasets import Dataset
-from torchdata.stateful_dataloader import StatefulDataLoader
 
 # https://github.com/huggingface/datasets/issues/5360
 # 还好搜了下，有现成的
 from datasets.distributed import split_dataset_by_node
-import random
+from torch.utils.data import DataLoader
+from torchdata.stateful_dataloader import StatefulDataLoader
+from transformers import AutoTokenizer
+
+from xihe.dataset import (
+    PackingDataset,
+    calculate_sampling_probabilities,
+    create_dataset,
+)
 
 
 def test_create_dataset() -> None:
@@ -143,13 +145,14 @@ def test_distributed_sampler() -> None:
 def test_iterable_dataset_resume() -> None:
     print("Testing dataloader resume...", flush=True)
 
+    early_stop_idx = 2
     iterable_dataset = Dataset.from_dict({"a": range(6)}).to_iterable_dataset(
         num_shards=3
     )
     state_dict: dict[str, Any] = {}
     for idx, example in enumerate(iterable_dataset):
         print(example)
-        if idx == 2:
+        if idx == early_stop_idx:
             state_dict = iterable_dataset.state_dict()
             print("checkpoint")
             break
@@ -165,7 +168,7 @@ def test_iterable_dataset_resume() -> None:
     # You would typically create a DataLoader and simulate a resume scenario
     # For example, by saving the state of the DataLoader and then resuming it
     # after some interruption.
-    pass  # Implement your test logic here
+    # Implement your test logic here
 
 
 # 全面转成iterable的dataset吧
@@ -179,10 +182,11 @@ def test_stateful_dataloader() -> None:
     )
     dataloader = StatefulDataLoader(iterable_dataset, batch_size=4, num_workers=4)  # type: ignore
 
+    early_stop_idx = 5
     state_dict: dict[str, Any] = {}
     for idx, batch in enumerate(dataloader):
         print(f"Batch {idx}: {batch}")
-        if idx == 3:
+        if idx == early_stop_idx:
             state_dict = dataloader.state_dict()
             print("checkpoint")
             break
@@ -192,7 +196,7 @@ def test_stateful_dataloader() -> None:
     print("restart from checkpoint")
     for idx, batch in enumerate(dataloader):
         print(f"Batch {idx}: {batch}")
-        if idx == 3:
+        if idx == early_stop_idx:
             break
 
     # 分析一下这个输出
@@ -229,23 +233,24 @@ def test_packing_dataset() -> None:
     dsa = gen_random_text_dataset("A", 5, 10, 8)
     print(dsa)
 
-    dsA = Dataset.from_dict(
+    ds_a = Dataset.from_dict(
         {"text": gen_random_text_dataset("A", 5, 10, 1000)}
     ).to_iterable_dataset(num_shards=4)
-    dsB = Dataset.from_dict(
+    ds_b = Dataset.from_dict(
         {"text": gen_random_text_dataset("B", 5, 10, 1023)}
     ).to_iterable_dataset(num_shards=4)
-    dsC = Dataset.from_dict(
+    ds_c = Dataset.from_dict(
         {"text": gen_random_text_dataset("C", 5, 10, 839)}
     ).to_iterable_dataset(num_shards=4)
 
     tokenizer = AutoTokenizer.from_pretrained("gpt2")
     packing_dataset = PackingDataset(
-        datasets=[dsA, dsB, dsC],
+        datasets=[ds_a, ds_b, ds_c],
         tokenizer=tokenizer,
         sampling_probabilities=[0.5, 0.3, 0.2],
     )
 
+    early_stop_idx = 5
     # 我们想要测试没有经过tokenizer的数据流
     #
     interleaved_dataset = packing_dataset.get_interleaved_dataset()
@@ -253,7 +258,7 @@ def test_packing_dataset() -> None:
 
     for idx, example in enumerate(interleaved_dataset):
         print(f"Example {idx}: {example}")
-        if idx == 5:
+        if idx == early_stop_idx:
             break
 
     tokenized_dataset = packing_dataset.get_tokenized_dataset()
@@ -261,7 +266,7 @@ def test_packing_dataset() -> None:
 
     for idx, example in enumerate(tokenized_dataset):
         print(f"Tokenized Example {idx}: {example}")
-        if idx == 5:
+        if idx == early_stop_idx:
             break
 
     # 到了这里 shard仍然有4个
@@ -272,7 +277,7 @@ def test_packing_dataset() -> None:
     print("packed dataset: ", packed_dataset)
     for idx, example in enumerate(packed_dataset):
         print(f"Packed Example {idx}: {example}")
-        if idx == 5:
+        if idx == early_stop_idx:
             break
 
     # 我要弄清楚这个管线到底是怎么工作的！
