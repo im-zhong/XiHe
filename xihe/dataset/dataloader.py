@@ -85,6 +85,8 @@ class PackingDataset:
         for i in range(0, len(packed_input_ids), context_length):
             cutted_packed_input_ids.append(packed_input_ids[i : i + context_length])
         # 去掉最后一个
+        if len(cutted_packed_input_ids[-1]) < context_length:
+            cutted_packed_input_ids.pop(-1)
         # cutted_packed_input_ids.pop(-1)  # 最后一行如果不足1024，就不要了。
         # 然后统计一下cutted_packed_input_ids的token数量
         total_tokens = sum(len(ids) for ids in cutted_packed_input_ids)
@@ -93,6 +95,47 @@ class PackingDataset:
         # 这里返回的就是一个batch
 
         return {"packed_input_ids": cutted_packed_input_ids}
+
+    def get_interleaved_dataset(self):
+        interleaved_dataset = interleave_datasets(
+            datasets=self.datasets,  # type: ignore
+            probabilities=self.sampling_probabilities,
+            # TODO: 这个种子是必须设置的
+            # 否则我们checkpoint之后，拿到的数据可能会不一样
+            seed=42,  # 设置随机种子以确保可重复性
+            stopping_strategy="all_exhausted",  # 当所有数据集都被耗尽时停止
+        )
+        return interleaved_dataset
+
+    def get_tokenized_dataset(self):
+        interleaved_dataset = self.get_interleaved_dataset()
+        tokenized_dataset = interleaved_dataset.map(
+            self.tokenize, batched=True, remove_columns=["text"]
+        )
+        return tokenized_dataset
+
+    def get_packed_dataset(self, context_length: int):
+        tokenized_dataset = self.get_tokenized_dataset()
+        packed_dataset = tokenized_dataset.map(
+            self.pack,
+            batched=True,
+            remove_columns=["input_ids", "attention_mask"],
+            # https://huggingface.co/docs/datasets/v4.0.0/en/package_reference/main_classes#datasets.Dataset.map.fn_kwargs
+            fn_kwargs={"context_length": context_length},
+        )
+        packed_dataset = packed_dataset.rename_column("packed_input_ids", "input_ids")
+        return packed_dataset
+
+    def get_splited_dataset(self, context_length: int, rank: int, world_size: int):
+        packed_dataset = self.get_packed_dataset(context_length=context_length)
+        # 这里我们需要把数据集分成world_size份
+        # 每一份的rank是rank
+        splited_dataset = split_dataset_by_node(
+            packed_dataset,
+            rank=rank,
+            world_size=world_size,
+        )
+        return splited_dataset
 
     # len 和 getitem不需要自己写
     # 我们就写一个get_dataset就行了
@@ -141,7 +184,7 @@ class PackingDataset:
             batch_size=batch_size,
         )
 
-    def to_torch_dataset(self, batch_size: int, context_length: int):
+    def to_torch_dataset(self, context_length: int):
         interleaved_dataset = interleave_datasets(
             datasets=self.datasets,  # type: ignore
             probabilities=self.sampling_probabilities,
@@ -149,6 +192,7 @@ class PackingDataset:
             stopping_strategy="all_exhausted",  # 当所有数据集都被耗尽时停止
         )
 
+        # batched ！？
         tokenized_dataset = interleaved_dataset.map(
             self.tokenize, batched=True, remove_columns=["text"]
         )
@@ -164,10 +208,8 @@ class PackingDataset:
         # return packed_dataset.with_format("torch")
         return packed_dataset
 
-    def to_distributed_dataset(
-        self, batch_size, context_length, rank: int, world_size: int
-    ):
-        dataset = self.to_torch_dataset(batch_size, context_length)
+    def to_distributed_dataset(self, context_length, rank: int, world_size: int):
+        dataset = self.to_torch_dataset(context_length)
         dataset = split_dataset_by_node(
             dataset,
             rank=rank,
@@ -178,7 +220,12 @@ class PackingDataset:
     def to_stateful_dataloader(
         self, batch_size: int, context_length: int, rank: int, world_size: int
     ) -> StatefulDataLoader:
-        dataset = self.to_distributed_dataset(
-            batch_size, context_length, rank, world_size
+        dataset = self.get_splited_dataset(
+            context_length=context_length, rank=rank, world_size=world_size
+        ).with_format("torch")
+        # dataset = self.to_distributed_dataset(
+        #     context_length=context_length, rank=rank, world_size=world_size
+        # )
+        return StatefulDataLoader(
+            dataset=dataset, batch_size=batch_size, drop_last=True
         )
-        return StatefulDataLoader(dataset=dataset, batch_size=batch_size)

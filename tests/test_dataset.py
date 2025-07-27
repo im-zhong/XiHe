@@ -18,6 +18,7 @@ from torchdata.stateful_dataloader import StatefulDataLoader
 # https://github.com/huggingface/datasets/issues/5360
 # 还好搜了下，有现成的
 from datasets.distributed import split_dataset_by_node
+import random
 
 
 def test_create_dataset() -> None:
@@ -196,3 +197,145 @@ def test_stateful_dataloader() -> None:
     # 分析一下这个输出
     # 感觉这个stateful dataloader是可以完成我们的需求的
     #
+
+
+# 写一个随机文本生成器作为测试数据集
+
+
+# 想一下什么样的数据集比较容易测试
+# 随机指定一个长度 min max
+# 第一个样本就是A0 A0 A0 A0 A0
+# 第二个样本就是A1 A1 A1 A1 A1
+# 这样吧
+def gen_random_text_dataset(
+    prefix: str, min_len: int, max_len: int, size: int
+) -> list[str]:
+    random.seed(42)  # For reproducibility
+    dataset = []
+
+    for i in range(size):
+        length = random.randint(min_len, max_len)
+        text = f"{prefix}" + (f"{i}" * length)
+        dataset.append(text.strip())
+
+    return dataset
+
+
+# ok! 完全弄懂了！
+def test_packing_dataset() -> None:
+    # 好像只要dataset包含text这一个列就可以作为packding dataset的参数了
+
+    dsa = gen_random_text_dataset("A", 5, 10, 8)
+    print(dsa)
+
+    dsA = Dataset.from_dict(
+        {"text": gen_random_text_dataset("A", 5, 10, 1000)}
+    ).to_iterable_dataset(num_shards=4)
+    dsB = Dataset.from_dict(
+        {"text": gen_random_text_dataset("B", 5, 10, 1023)}
+    ).to_iterable_dataset(num_shards=4)
+    dsC = Dataset.from_dict(
+        {"text": gen_random_text_dataset("C", 5, 10, 839)}
+    ).to_iterable_dataset(num_shards=4)
+
+    tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    packing_dataset = PackingDataset(
+        datasets=[dsA, dsB, dsC],
+        tokenizer=tokenizer,
+        sampling_probabilities=[0.5, 0.3, 0.2],
+    )
+
+    # 我们想要测试没有经过tokenizer的数据流
+    #
+    interleaved_dataset = packing_dataset.get_interleaved_dataset()
+    print("interleaved dataset: ", interleaved_dataset)
+
+    for idx, example in enumerate(interleaved_dataset):
+        print(f"Example {idx}: {example}")
+        if idx == 5:
+            break
+
+    tokenized_dataset = packing_dataset.get_tokenized_dataset()
+    print("tokenized dataset: ", tokenized_dataset)
+
+    for idx, example in enumerate(tokenized_dataset):
+        print(f"Tokenized Example {idx}: {example}")
+        if idx == 5:
+            break
+
+    # 到了这里 shard仍然有4个
+    # 这意味着我们是可以做split by node的
+    # 看看效果吧
+    context_length = 8
+    packed_dataset = packing_dataset.get_packed_dataset(context_length=context_length)
+    print("packed dataset: ", packed_dataset)
+    for idx, example in enumerate(packed_dataset):
+        print(f"Packed Example {idx}: {example}")
+        if idx == 5:
+            break
+
+    # 我要弄清楚这个管线到底是怎么工作的！
+    # 怎么日志还输出了好多次呢？
+    # 关键应该在map上！
+    # 我们设置了map的batched=True
+    # map还有一个默认参数是batch_size
+    # 这意味着每次都会读取batch_size个example
+    # 然后调用map函数，也就是tokenize和packing
+    # 这就解释了为什么会有多次输出
+
+    # 我们把数据集split一下 看看输出的都是什么
+
+    world_size = 4
+    splited_ds0 = packing_dataset.get_splited_dataset(
+        context_length=context_length, rank=0, world_size=world_size
+    )
+    # 现在他的shard就只有1了
+    print("Splitted Dataset for rank 0: ", splited_ds0)
+    for idx, example in enumerate(splited_ds0):
+        print(f"Splitted Example {idx}: {example}")
+        print(
+            f"Decoded Example {idx}: {tokenizer.decode(example['input_ids'], skip_special_tokens=True)}"
+        )
+
+    splited_ds1 = packing_dataset.get_splited_dataset(
+        context_length=context_length, rank=1, world_size=world_size
+    )
+    print("Splitted Dataset for rank 1: ", splited_ds1)
+    for idx, example in enumerate(splited_ds1):
+        print(f"Splitted Example {idx}: {example}")
+        # decode ids
+        print(
+            f"Decoded Example {idx}: {tokenizer.decode(example['input_ids'], skip_special_tokens=True)}"
+        )
+
+    # 我如果可以把这些inputids 都变回文字 会好一些
+    # 可以看到到底发生了什么
+
+    # 怎么把print重定向到文件里面呢
+    # 这些测试的输出太长了 被vscode给truncate了
+    # uv run pytest -s -k test_packing_dataset > test_packing_dataset.txt
+    # ok!
+    # 然后用dataloader来获取batch 就ok了
+    # TODO: 把这个封装成get_dataloader
+    # 然后把这里的代码改成调用这个函数
+    print("Using DataLoader to get batches from rank 2...")
+    # splited_ds2 = packing_dataset.get_splited_dataset(
+    #     context_length=context_length, rank=2, world_size=world_size
+    # ).with_format("torch")
+    # dataloader = StatefulDataLoader(
+    #     splited_ds2,
+    #     batch_size=4,
+    #     drop_last=True,  # 如果最后一个batch不满4个就丢弃
+    # )
+    dataloader = packing_dataset.to_stateful_dataloader(
+        batch_size=4,
+        context_length=context_length,
+        rank=2,
+        world_size=world_size,
+    )
+    for idx, batch in enumerate(dataloader):
+        assert batch["input_ids"].shape == (4, context_length)
+        print(f"Batch {idx}: {batch}")
+        print(
+            f"Decoded Batch {idx}: {[tokenizer.decode(ids, skip_special_tokens=True) for ids in batch['input_ids']]}"
+        )
