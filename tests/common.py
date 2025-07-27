@@ -3,6 +3,7 @@
 # 这里面放一些单元测试可以复用的代码吧
 
 from xihe.settings import (
+    CheckpointConfig,
     Config,
     DataLoaderConfig,
     DatasetArgs,
@@ -134,5 +135,9 @@ def generate_testing_config() -> Config:
                     streaming=True,
                 ),
             ],
+        ),
+        checkpoint=CheckpointConfig(
+            keep_num=5,
+            save_steps=1000,
         ),
     )

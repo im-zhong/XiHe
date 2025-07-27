@@ -15,6 +15,8 @@ def test_checkpoint() -> None:
         grad_scaler={"dummy_grad_scaler_key": "dummy_grad_scaler_value"},
         step=0,
         dataloader=[{"dummy_dataloader_key": "dummy_dataloader_value"}],
+        loss=0.0,
+        num_tokens=0,
     )
 
     checkpoint_path = defs.cache_dir / "test_checkpoint.pt"
@@ -25,6 +27,7 @@ def test_checkpoint() -> None:
     checkpoint.save(checkpoint_path)
 
     loaded_checkpoint = load_ckpt_from_path(checkpoint_path)
+    assert loaded_checkpoint is not None, "Loaded checkpoint should not be None"
     print(f"Loaded Checkpoint: {loaded_checkpoint}")
     assert loaded_checkpoint.get_config() == checkpoint.get_config()
     assert loaded_checkpoint.get_model_state_dict() == checkpoint.get_model_state_dict()
@@ -45,3 +48,5 @@ def test_checkpoint() -> None:
     ) == checkpoint.get_dataloader_state_dict(0)
     assert loaded_checkpoint.get_step() == checkpoint.get_step()
     assert loaded_checkpoint.get_state_dict() == checkpoint.get_state_dict()
+    assert loaded_checkpoint.get_loss() == checkpoint.get_loss()
+    assert loaded_checkpoint.get_num_tokens() == checkpoint.get_num_tokens()

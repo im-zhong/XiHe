@@ -70,7 +70,10 @@ if __name__ == "__main__":
             join=True,
         )
     elif ckpt_dir is not None:
-        checkpoint: Checkpoint = load_ckpt_from_path(ckpt_dir)
+        checkpoint: Checkpoint | None = load_ckpt_from_path(ckpt_dir)
+        if checkpoint is None:
+            msg = f"Checkpoint not found at {ckpt_dir}"
+            raise ValueError(msg)
         spawn(
             train_from_checkpoint,
             args=(world_size, checkpoint),

@@ -142,6 +142,7 @@ def test_distributed_trainer_from_scratch() -> None:
 def test_distributed_trainer_from_ckpt() -> None:
     ckpt_path = defs.get_ckpt_path(project="myllm-pretrain-test", step=10)
     checkpoint = load_ckpt_from_path(ckpt_path)
+    assert checkpoint is not None, "Checkpoint should not be None"
     # get xxx state
     # 我感觉还是给封装一下比较好吧
     # 做一个Checkpoint
