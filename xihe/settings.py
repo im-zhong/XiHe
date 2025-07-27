@@ -130,6 +130,22 @@ class OptimizerConfig(BaseModel):
     max_grad_norm: float = Field(..., description="Maximum norm for gradient clipping.")
 
 
+class CheckpointConfig(BaseModel):
+    # save当前loss最低的checkpoint
+    # 这样设计会不会导致save的非常频繁呢？
+    # 固定step数保存
+    # 最多保存多少个
+    # 还会保存最佳loss的
+    keep_num: int = Field(
+        5,
+        description="Number of last checkpoints to keep. Older checkpoints will be deleted.",
+    )
+    save_steps: int = Field(
+        1000,
+        description="Interval (in steps) at which to save checkpoints.",
+    )
+
+
 class Config(BaseModel):
     model: ModelConfig = Field(..., description="Model configuration.")
     tokenizer: TokenizerConfig = Field(..., description="Tokenizer configuration.")
@@ -139,7 +155,10 @@ class Config(BaseModel):
         ...,
         description="DataLoader configuration, including datasets and sampling probabilities.",
     )
-
+    checkpoint: CheckpointConfig = Field(
+        ...,
+        description="Checkpoint configuration, including save frequency and number of checkpoints to keep.",
+    )
     wandb: WandbConfig
 
 

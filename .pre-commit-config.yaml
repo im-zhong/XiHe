@@ -54,7 +54,7 @@ repos:
     rev: v4.0.0-alpha.8
     hooks:
       # Run prettier on specified file types
-      - id: prettier
+      - id: prettierp
         types_or: [json, toml, xml, yaml]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
