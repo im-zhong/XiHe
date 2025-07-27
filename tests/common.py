@@ -91,7 +91,7 @@ def generate_testing_config() -> Config:
         ),
         tokenizer=TokenizerConfig(
             tokenizer_name="gpt2",
-            vocab_size=50257,
+            # vocab_size=50257,
         ),
         trainer=TrainerConfig(
             checkpoint_dir="checkpoints",

@@ -66,7 +66,12 @@ class BasicGPTTrainer:
         shifted_labels = labels[:, 1:].contiguous()
         # labels.shape = [batch_size, seq_length]
         # labels = batch["labels"].to(self.device)
-        with torch.autocast(device_type="cuda", dtype=torch.float16):
+        # self.grad_scaler.
+        with torch.autocast(
+            device_type="cuda",
+            dtype=torch.float16,
+            enabled=self.grad_scaler.is_enabled(),
+        ):
             logits = self.model(inputs)
             # logits.shape = [batch_size, seq_length, vocab_size]
             # 要在这里构造labels

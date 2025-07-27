@@ -78,7 +78,7 @@ class DataLoaderConfig(BaseModel):
 
 class TokenizerConfig(BaseModel):
     tokenizer_name: str = Field(..., description="The name or path of the tokenizer.")
-    vocab_size: int = Field(..., description="Size of the tokenizer vocabulary.")
+    # vocab_size: int = Field(..., description="Size of the tokenizer vocabulary.")
 
 
 class ModelConfig(BaseModel):
@@ -92,18 +92,18 @@ class ModelConfig(BaseModel):
     intermediate_size: int = Field(
         ..., description="Size of the intermediate (feed-forward) layers."
     )
-    dtype: str = Field(
-        "float32",
-        description="Data type for model parameters. Default is 'float32'.",
-    )
+    # dtype: str = Field(
+    #     "float32",
+    #     description="Data type for model parameters. Default is 'float32'.",
+    # )
     mixed_precision: bool = Field(
         False,
         description="Whether to use mixed precision training. Default is False.",
     )
-    low_precision_dtype: str = Field(
-        "bfloat16",
-        description="Data type for low precision training. Default is 'bfloat16'.",
-    )
+    # low_precision_dtype: str = Field(
+    #     "bfloat16",
+    #     description="Data type for low precision training. Default is 'bfloat16'.",
+    # )
 
 
 class TrainerConfig(BaseModel):

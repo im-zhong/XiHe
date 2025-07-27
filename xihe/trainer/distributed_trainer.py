@@ -146,7 +146,7 @@ class DistributedGPTTrainer:
         # TODO: vocab size应该是不用设置的
         # 应该可以通过tokenizer对象来获取才对
         local_model = Transformer(
-            vocab_size=config.tokenizer.vocab_size,
+            vocab_size=tokenizer.vocab_size,
             max_seq_len=config.model.context_length,
             num_layers=config.model.num_layers,
             hidden_size=config.model.hidden_size,
@@ -182,7 +182,9 @@ class DistributedGPTTrainer:
         if ckpt:
             lr_scheduler.load_state_dict(ckpt.get_scheduler_state_dict())
 
-        grad_scaler = GradScaler("cuda")  # Enable mixed precision training
+        grad_scaler = GradScaler(
+            "cuda", enabled=config.model.mixed_precision
+        )  # Enable mixed precision training
         if ckpt:
             grad_scaler.load_state_dict(ckpt.get_grad_scaler_state_dict())
 
@@ -191,7 +193,7 @@ class DistributedGPTTrainer:
             rank=rank,
             world_size=world_size,
             grad_scaler=grad_scaler,
-            vocab_size=config.tokenizer.vocab_size,
+            vocab_size=tokenizer.vocab_size,
             model=model,
             optimizer=optimizer,
             scheduler=lr_scheduler,
