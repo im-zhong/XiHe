@@ -100,16 +100,14 @@ repos:
   #       # ignore E501 line too long
   #       args: ["--ignore=E501"]
 
-
-repos:
   - repo: https://github.com/RobertCraigie/pyright-python
     rev: v1.1.403
     hooks:
-    - id: pyright
-      additional_dependencies: []
-      args: []
-      # 卧槽！成了，真的管用！
-      language: system
+      - id: pyright
+        additional_dependencies: []
+        args: []
+        # 卧槽！成了，真的管用！
+        language: system
 
   # Mypy(https://www.mypy-lang.org/) is an optional static type checker for Python that aims to combine the benefits of dynamic (or "duck") typing and static typing.
   # - repo: https://github.com/pre-commit/mirrors-mypy
@@ -124,14 +122,14 @@ repos:
   #           "--python-executable",
   #           "./.venv/bin/python",
   #         ]
-        # https://stackoverflow.com/questions/74291006/mypy-pre-commit-results-differ-from
-        # according to different projects, mypy should include additional dependencies
-        # Because pre-commit runs mypy from an isolated virtualenv (without your dependencies) you may also find it useful to add the typed dependencies to additional_dependencies so mypy can better perform dynamic analysis
-        # additional_dependencies:
-        #   - types-requests
-        #   - pydantic
-        #   - aiohttp
-        #   - types-redis
-        #   - fastapi
-        #   - uvicorn
-        #   - httpx
+  # https://stackoverflow.com/questions/74291006/mypy-pre-commit-results-differ-from
+  # according to different projects, mypy should include additional dependencies
+  # Because pre-commit runs mypy from an isolated virtualenv (without your dependencies) you may also find it useful to add the typed dependencies to additional_dependencies so mypy can better perform dynamic analysis
+  # additional_dependencies:
+  #   - types-requests
+  #   - pydantic
+  #   - aiohttp
+  #   - types-redis
+  #   - fastapi
+  #   - uvicorn
+  #   - httpx
