@@ -36,7 +36,6 @@ from typing import Any
 # 我们还有TrainerConfig
 # EvalConfig 等等的东西
 # 还有就是这个东西
-from pydantic import BaseModel, Field
 from typing import Literal
 from xihe.schemas import DatasetArgs
 

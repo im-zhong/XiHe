@@ -2,7 +2,6 @@
 # zhangzhong
 
 from datasets import load_dataset
-from pprint import pprint
 import multiprocessing
 import os
 from tokenizers import (
@@ -153,7 +152,6 @@ def preprocess_stack_exchange():
 
 
 def train_byte_level_bpe_tokenizer():
-
     tokenizer = Tokenizer(models.BPE())
     tokenizer.normalizer = None  # No normalization, default for GPT2
     tokenizer.pre_tokenizer = pre_tokenizers.Sequence(

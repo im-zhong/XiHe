@@ -9,16 +9,9 @@ from torch.optim.lr_scheduler import LambdaLR
 import torch
 from torch import Tensor
 from torch.optim import Optimizer
-from tqdm import tqdm
 from wandb.sdk.wandb_run import Run
-import os
-import torch.distributed as dist
-from torch.nn.parallel import DistributedDataParallel as DDP
-from torchdata.stateful_dataloader import StatefulDataLoader
 from typing import Any
 
-import random
-import numpy as np
 
 
 # TODO: 更名为 CausalLLMTrainer or GPTTrainer

@@ -3,11 +3,8 @@
 
 
 from pathlib import Path
-import wandb
-from wandb.sdk.wandb_run import Run
 from typing import Any
 
-from torch import nn
 import torch
 from xihe.settings import Config
 import os

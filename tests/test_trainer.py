@@ -2,25 +2,17 @@
 # zhangzhong
 
 from xihe.trainer import BasicGPTTrainer
-from pathlib import Path
 from xihe.model import Transformer
 from xihe.optimizer import create_optimizer, create_cosine_lr_scheduler
-from xihe.dataset import create_dataset
-from transformers import AutoTokenizer
-from transformers.tokenization_utils import PreTrainedTokenizer
 from torch.optim import Optimizer
-from torch.utils.data import DataLoader
-from typing import Any
 from xihe.tokenizer import create_tokenizer
-from xihe.dataset import create_dataloader
-from xihe.schemas import DatasetArgs
 from torch.optim.lr_scheduler import LambdaLR
 import torch
 from xihe.settings import Config
 from tests.common import generate_testing_config
 from xihe.trainer import DistributedGPTTrainer
 from xihe.defs import defs
-from xihe.ckpt import Checkpoint, load_ckpt_from_path
+from xihe.ckpt import load_ckpt_from_path
 
 
 def test_basic_gpt_trainer():

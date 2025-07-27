@@ -6,33 +6,15 @@
 # 剩下的所有配置都写在配置文件里面就行了呗
 # 必要的时候，可以提供一些额外的参数，用来覆盖config里面的配置足够了
 
-import os
-from torch.optim.lr_scheduler import LambdaLR
-from xihe.model import Transformer
 from xihe.settings import load_config
 from xihe.trainer import (
     DistributedGPTTrainer,
 )
-from xihe.dataset import (
-    PackingDataset,
-    create_dataset,
-    calculate_sampling_probabilities,
-)
 from pathlib import Path
-import wandb
-from wandb.sdk.wandb_run import Run
 import argparse
 import torch
-from transformers import AutoTokenizer
-from transformers.tokenization_utils import PreTrainedTokenizer
-from torch.optim import Optimizer, Adam, AdamW
-from torch.utils.data import DataLoader
 from xihe.settings import Config
-from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.multiprocessing as mp  # torch.multiprocessing is a PyTorch wrapper around Python’s native multiprocessing
-from typing import Any
-import random
-import numpy as np
 from xihe.ckpt import Checkpoint, load_ckpt_from_path
 
 

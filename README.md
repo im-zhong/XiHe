@@ -29,7 +29,8 @@ My LLM.
 5. 2025/7/26
    1. [x] 自底向上的添加单元测试并重构
 6. 2025/7/27
-   1. [ ] 确认dataloader的实现是正确的，需要给出几个简单的dataset的例子，然后走我们自己的数据处理管线，看看是否正确
-   2. [ ] 确认Trainer的实现是正确的，包括amp，ddp等
-   3. [ ] 确定XiHe 120M 模型的各种参数
-   4. [ ] 开始模型分布式训练！<https://docs.pytorch.org/tutorials/intermediate/ddp_series_minGPT.html> 又找到一个代码参考源，不过这个也是咱们写完之后对答案用吧
+   1. [x] 确认dataloader的实现是正确的，需要给出几个简单的dataset的例子，然后走我们自己的数据处理管线，看看是否正确
+   2. [ ] 加上ruff等各种静态检查工具
+   3. [ ] 确认Trainer的实现是正确的，包括amp，ddp等
+   4. [ ] 确定XiHe 120M 模型的各种参数
+   5. [ ] 开始模型分布式训练！<https://docs.pytorch.org/tutorials/intermediate/ddp_series_minGPT.html> 又找到一个代码参考源，不过这个也是咱们写完之后对答案用吧

@@ -1,4 +1,4 @@
-d# 2025/7/20
+d  # 2025/7/20
 # zhangzhong
 
 
@@ -29,7 +29,7 @@ import argparse
 import torch
 from transformers import AutoTokenizer
 from transformers.tokenization_utils import PreTrainedTokenizer
-from torch.optim import Optimizer, Adam, AdamW
+from torch.optim import Optimizer
 
 
 def create_tokenizer(tokenizer_name: str) -> PreTrainedTokenizer:

@@ -3,13 +3,12 @@
 
 from xihe.dataset import (
     PackingDataset,
-    DatasetEnum,
     create_dataset,
     calculate_sampling_probabilities,
 )
 from typing import Any
 from transformers import AutoTokenizer
-from torch.utils.data import DataLoader, DistributedSampler
+from torch.utils.data import DataLoader
 import torch
 import os
 from datasets import Dataset
@@ -157,7 +156,7 @@ def test_iterable_dataset_resume() -> None:
         num_shards=3
     )
     iterable_dataset.load_state_dict(state_dict)
-    print(f"restart from checkpoint")
+    print("restart from checkpoint")
     for example in iterable_dataset:
         print(example)
     # This is a placeholder for the actual test implementation
@@ -188,7 +187,7 @@ def test_stateful_dataloader() -> None:
 
     dataloader = StatefulDataLoader(iterable_dataset, batch_size=4, num_workers=4)
     dataloader.load_state_dict(state_dict)
-    print(f"restart from checkpoint")
+    print("restart from checkpoint")
     for idx, batch in enumerate(dataloader):
         print(f"Batch {idx}: {batch}")
         if idx == 3:

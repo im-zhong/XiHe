@@ -2,16 +2,13 @@
 # zhangzhong
 
 from xihe.model import Transformer
-from xihe.settings import ModelConfig, load_config
 from torch.utils.data import DataLoader
 
 # use pytorch lambdaLR to impl custom learning rate scheduler
-from torch.optim import AdamW  # use this optimizer
 
 # https://docs.pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.LambdaLR.html
 from torch.optim.lr_scheduler import LambdaLR
 import torch
-import math
 from torch import Tensor
 from torch.optim import Optimizer
 from tqdm import tqdm

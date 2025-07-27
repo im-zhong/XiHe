@@ -17,16 +17,9 @@ from xihe.optimizer import (
     create_optimizer,
     create_cosine_lr_scheduler,
 )
-from xihe.utils.wandb import init_wandb_run, load_wnadb_run
+from xihe.utils.wandb import init_wandb_run
 from .basic_trainer import BasicGPTTrainer
-from wandb.sdk.wandb_run import Run
-from xihe.settings import Config, WandbConfig
-from transformers import AutoTokenizer
-from transformers.tokenization_utils import PreTrainedTokenizer
-from torch.optim import Optimizer, Adam, AdamW
-from torch.utils.data import DataLoader
 from xihe.settings import Config
-from torchdata.stateful_dataloader import StatefulDataLoader
 from xihe.tokenizer import create_tokenizer
 from xihe.dataset import create_dataloader
 import torch.distributed as dist
@@ -36,7 +29,6 @@ from xihe.defs import defs
 # 我感觉也没必要整两个，因为我们就是从Config里面读出来的
 # 他们俩用一个就行了
 # config用schema就行了
-from xihe.schemas import DatasetArgs
 from xihe.ckpt import Checkpoint
 
 
