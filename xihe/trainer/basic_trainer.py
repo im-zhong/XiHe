@@ -2,8 +2,6 @@
 # zhangzhong
 #
 
-from xihe.model import Transformer
-
 # https://docs.pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.LambdaLR.html
 from torch.optim.lr_scheduler import LambdaLR
 import torch
@@ -11,7 +9,8 @@ from torch import Tensor
 from torch.optim import Optimizer
 from wandb.sdk.wandb_run import Run
 from typing import Any
-
+from torch.amp.grad_scaler import GradScaler
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 
 # TODO: 更名为 CausalLLMTrainer or GPTTrainer
@@ -21,17 +20,17 @@ class BasicGPTTrainer:
     def __init__(
         self,
         vocab_size: int,
-        model: Transformer,
+        model: DDP,
         # settings: ModelConfig,
         optimizer: Optimizer,
         scheduler: LambdaLR,
         # dataloader: StatefulDataLoader,
-        grad_scaler: torch.amp.GradScaler,
+        grad_scaler: GradScaler,
         rank: int,
         world_size: int,
         max_norm: float = 1.0,
         run: Run | None = None,
-        device="cuda",
+        device: str = "cuda",
         # dtype: str = "float32", 我觉得先不用这个参数吧
         # 其实混合精度的原理我还不理解
         # 而且我还需要弄清楚一件事情

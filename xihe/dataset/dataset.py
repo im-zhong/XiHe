@@ -10,6 +10,7 @@
 from datasets import (
     load_dataset,
     IterableDataset,
+    Dataset,
     load_dataset_builder,
     DatasetBuilder,
 )
@@ -176,7 +177,7 @@ def calculate_sampling_probabilities(
 # 可以先实现一个简单的函数
 # 根据一个DatasetConfig返回一个Dataset
 def create_dataset(
-    path: str, name: str, split: str, streaming: bool
+    path: str, name: str, split: str, streaming: bool, num_shards: int = 1
 ) -> IterableDataset:
     # 因为我们需要对数据进行预处理
     # 所以实际上只有我们实验过的数据集才可以使用
@@ -191,6 +192,15 @@ def create_dataset(
         split=split,
         streaming=streaming,
     )
+
+    if not streaming:
+        assert isinstance(dataset, Dataset), f"Loaded dataset {path} is not an Dataset."
+        # TODO: 数据集本身是有一个shards的，转换成iterable dataset之后，会保留这个shard吗？
+        # 不过也并不重要吧，应该是可以获取数据集原本的shard的
+        dataset = dataset.to_iterable_dataset(num_shards=num_shards)
+    assert isinstance(dataset, IterableDataset), (
+        f"Loaded dataset {path} is not an IterableDataset."
+    )
     # assert isinstance(dataset, Dataset), "Loaded dataset is not a Dataset instance"
     # 需不需要转成iterable dataset?
     # 这个应该由一个参数来控制
@@ -200,6 +210,7 @@ def create_dataset(
 
     # 预处理数据集
     # 要不预处理这一步，不变成iterable了吧
+    # 这里应该对于streaming和local的数据的处理方式是不同的
     preprocessed_dataset = dataset.map(
         function=dataset_infos[DatasetEnum(path)].preprocess_fn,
         batched=True,
@@ -208,7 +219,4 @@ def create_dataset(
         # num_proc=self.num_procs,  # 使用多核处理
         remove_columns=dataset.column_names,
     )
-
-    if not streaming:
-        return preprocessed_dataset.to_iterable_dataset()
     return preprocessed_dataset

@@ -8,7 +8,7 @@ import torch
 
 import torch.nn.functional as F
 from torch import nn, Tensor
-
+d
 
 # 既然如此，不如RMSNorm也自己写了吧
 # https://docs.pytorch.org/docs/stable/generated/torch.nn.modules.normalization.RMSNorm.html

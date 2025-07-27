@@ -9,10 +9,11 @@ from torch.optim import AdamW  # use this optimizer
 from torch.optim.lr_scheduler import LambdaLR
 import math
 from torch.optim import Optimizer, Adam
+from torch.optim.optimizer import ParamsT
 
 
 def create_optimizer(
-    name: str, learning_rate: float, weight_decay: float, parameters
+    name: str, learning_rate: float, weight_decay: float, parameters: ParamsT
 ) -> Optimizer:
     if name.lower() == "adamw":
         return AdamW(params=parameters, lr=learning_rate, weight_decay=weight_decay)
@@ -23,7 +24,11 @@ def create_optimizer(
 
 
 def cosine_scheduler_with_warmup(
-    warmup_steps, total_steps, initial_lr, max_lr, final_lr
+    warmup_steps: int,
+    total_steps: int,
+    initial_lr: float,
+    max_lr: float,
+    final_lr: float,
 ):
     def lr_lambda(step: int):
         if step < warmup_steps:
@@ -37,8 +42,8 @@ def cosine_scheduler_with_warmup(
 
 def create_cosine_lr_scheduler(
     optimizer: Optimizer,
-    warmup_steps: float,
-    total_steps: float,
+    warmup_steps: int,
+    total_steps: int,
     initial_lr: float,
     max_lr: float,
     final_lr: float,

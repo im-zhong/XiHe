@@ -24,6 +24,7 @@ def create_dataloader(
             name=dataset.name,
             split=dataset.split,
             streaming=dataset.streaming,
+            num_shards=world_size,
         )
         for dataset in datasets_args
     ]

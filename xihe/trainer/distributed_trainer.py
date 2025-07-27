@@ -30,6 +30,7 @@ from xihe.defs import defs
 # 他们俩用一个就行了
 # config用schema就行了
 from xihe.ckpt import Checkpoint
+from torch.amp.grad_scaler import GradScaler
 
 
 # TODO: 更名为 CausalLLMTrainer or GPTTrainer
@@ -144,7 +145,7 @@ class DistributedGPTTrainer:
         # # Initialize model
         # TODO: vocab size应该是不用设置的
         # 应该可以通过tokenizer对象来获取才对
-        model = Transformer(
+        local_model = Transformer(
             vocab_size=config.tokenizer.vocab_size,
             max_seq_len=config.model.context_length,
             num_layers=config.model.num_layers,
@@ -154,10 +155,10 @@ class DistributedGPTTrainer:
             device=config.trainer.device,  # Pass the device from config
         )
         if ckpt:
-            model.load_state_dict(ckpt.get_model_state_dict())
-        model = model.to(config.trainer.device)
+            local_model.load_state_dict(ckpt.get_model_state_dict())
+        local_model = local_model.to(config.trainer.device)
         # TODO: need to call init_process_group, but where?
-        model = DDP(model, device_ids=[rank])
+        model = DDP(module=local_model, device_ids=[rank])
 
         # 这里需要创建optimizer和scheduler
         # TODO: 这些东西都得重写，optimizer必须在模型的参数放在正确的设备上才能创建
@@ -181,7 +182,7 @@ class DistributedGPTTrainer:
         if ckpt:
             lr_scheduler.load_state_dict(ckpt.get_scheduler_state_dict())
 
-        grad_scaler = torch.amp.GradScaler("cuda")  # Enable mixed precision training
+        grad_scaler = GradScaler("cuda")  # Enable mixed precision training
         if ckpt:
             grad_scaler.load_state_dict(ckpt.get_grad_scaler_state_dict())
 
