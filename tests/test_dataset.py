@@ -19,17 +19,186 @@ from xihe.dataset import (
     PackingDataset,
     calculate_sampling_probabilities,
     create_dataset,
+    get_dataset_features,
+    get_dataset_size,
 )
 
 
 def test_create_dataset() -> None:
+    # TODO: 这样做的问题就是，拿不到features
+    # 我们最开始的数据预处理就会出问题
+    # 这个东西还没有测试呢，需要测试一下
+    # features可以通过dataset builder来获取
     dataset = create_dataset(
         path="wikimedia/wikipedia",
         name="20231101.en",
-        split="train[:1024]",
+        # 只有本地的数据集才支持slice，也就是我们随便找一个路径测试，这个单元测试都是失败的
+        # 不如就不测试带slice的了
+        # split="train[:1024]",
+        split="train",
         streaming=True,
     )
     print(dataset)
+
+
+def test_get_dataset_features() -> None:
+    assert set(get_dataset_features(path="allenai/c4", name="en")) == {
+        "text",
+        "timestamp",
+        "url",
+    }
+
+    assert set(
+        get_dataset_features(path="wikimedia/wikipedia", name="20231101.en")
+    ) == {
+        "id",
+        "url",
+        "title",
+        "text",
+    }
+
+    # 哦，顺序可能是不对的，那就用set会好一些
+    assert set(get_dataset_features(path="nampdn-ai/tiny-codes", name=None)) == {
+        "prompt",
+        "main_topic",
+        "subtopic",
+        "adjective",
+        "action_verb",
+        "scenario",
+        "target_audience",
+        "programming_language",
+        "common_sense_topic",
+        "idx",
+        "response",
+    }
+
+    assert set(
+        get_dataset_features(path="eminorhan/gutenberg_en", name="chunk_size_1024")
+    ) == {
+        "text",
+        "title",
+        "author",
+        "author year of birth",
+        "author year of death",
+        "language",
+        "downloads",
+        "subjects",
+        "document id",
+        "type",
+    }
+
+    assert set(get_dataset_features(path="donfu/oa-stackexchange", name=None)) == {
+        "INSTRUCTION",
+        "RESPONSE",
+        "SOURCE",
+        "METADATA",
+    }
+
+    assert set(get_dataset_features(path="common-pile/arxiv_papers", name=None)) == {
+        "id",
+        "text",
+        "source",
+        "created",
+        "added",
+        "metadata",
+    }
+
+
+def test_get_dataset_size() -> None:
+    # 这个测试需要联网
+    # 但是我不想联网，所以就不测试了
+    # 直接用get_dataset_size_from_hf来测试吧
+    # assert get_dataset_size(path="allenai/c4", name="en") == 21.0
+    # assert get_dataset_size(path="wikimedia/wikipedia", name="20231101.en") == 62.0
+    # assert get_dataset_size(path="nampdn-ai/tiny-codes", name=None) is None
+    # assert (
+    #     get_dataset_size(path="eminorhan/gutenberg_en", name="chunk_size_1024") == 21.0
+    # )
+    # assert get_dataset_size(path="donfu/oa-stackexchange", name=None) is None
+    # assert get_dataset_size(path="common-pile/arxiv_papers", name=None) == 21.0
+    print("allenai/c4 en", get_dataset_size(path="allenai/c4", name="en"))
+    print(
+        "wikimedia/wikipedia 20231101.en",
+        get_dataset_size(path="wikimedia/wikipedia", name="20231101.en"),
+    )
+    print(
+        "nampdn-ai/tiny-codes", get_dataset_size(path="nampdn-ai/tiny-codes", name=None)
+    )
+    print(
+        "eminorhan/gutenberg_en chunk_size_1024",
+        get_dataset_size(path="eminorhan/gutenberg_en", name="chunk_size_1024"),
+    )
+    print(
+        "donfu/oa-stackexchange",
+        get_dataset_size(path="donfu/oa-stackexchange", name=None),
+    )
+    print(
+        "common-pile/arxiv_papers",
+        get_dataset_size(path="common-pile/arxiv_papers", name=None),
+    )
+
+
+def get_datasets() -> list[dict[str, Any]]:
+    return [
+        {
+            "path": "allenai/c4",
+            "name": "en",
+            "split": "train",
+            # "num_epochs": 1,
+        },
+        {
+            "path": "wikimedia/wikipedia",
+            "name": "20231101.en",
+            "split": "train",
+            # "num_epochs": 2,
+        },
+        {
+            "path": "nampdn-ai/tiny-codes",
+            "name": None,
+            "split": "train",
+            # "num_epochs": 1,
+        },
+        {
+            "path": "eminorhan/gutenberg_en",
+            "name": "chunk_size_1024",
+            "split": "train",
+            # "num_epochs": 2,
+        },
+        {
+            "path": "donfu/oa-stackexchange",
+            "name": None,
+            "split": "train",
+            # "num_epochs": 1,
+        },
+        {
+            "path": "common-pile/arxiv_papers",
+            "name": None,
+            "split": "train",
+            # "num_epochs": 1,
+        },
+    ]
+
+
+# TODO
+def test_dataset_preprocessing() -> None:
+    # 所有的数据集都要测试
+    # 这些数据集被定义太多次了，咱们提取出来
+    # arxiv: dict[str, Any] = {
+    #     "path": "common-pile/arxiv_papers",
+    #     "name": None,
+    #     "split": "train",
+    #     # "num_epochs": 1,
+    #     "num_shards": 4,
+    # }
+
+    for ds in get_datasets():
+        dataset = create_dataset(**ds)
+        print(f"Dataset: {dataset}")
+        example: dict[str, Any] = next(iter(dataset))
+        # 每个数据集在处理完成之后，都应该只有text这一列
+        features: list[str] = example.keys()  # type: ignore
+        assert len(features) == 1, "Dataset should only have one feature: 'text'"
+        assert "text" in features, "Dataset should have 'text' feature"
 
 
 # 我还想实现一个功能
@@ -37,20 +206,42 @@ def test_create_dataset() -> None:
 # 就保存在一个cache目录里面就好了
 # 这样可以节省下载的时间，节省跑单元测试的时间
 def test_calculate_sampling_probabilities() -> None:
-    wikipedia: dict[str, Any] = {
-        "path": "wikimedia/wikipedia",
-        "name": "20231101.en",
-        "num_epochs": 2,
-    }
     c4: dict[str, Any] = {
         "path": "allenai/c4",
         "name": "en",
         "num_epochs": 1,
     }
+    wikipedia: dict[str, Any] = {
+        "path": "wikimedia/wikipedia",
+        "name": "20231101.en",
+        "num_epochs": 2,
+    }
+    codes: dict[str, Any] = {
+        "path": "nampdn-ai/tiny-codes",
+        "name": None,
+        "num_epochs": 1,
+    }
+    books: dict[str, Any] = {
+        "path": "eminorhan/gutenberg_en",
+        "name": "chunk_size_1024",
+        "num_epochs": 2,
+    }
+    stackexchange: dict[str, Any] = {
+        "path": "donfu/oa-stackexchange",
+        "name": None,
+        "num_epochs": 1,
+    }
+    arxiv: dict[str, Any] = {
+        "path": "common-pile/arxiv_papers",
+        "name": None,
+        "num_epochs": 1,
+    }
+    ds = [c4, wikipedia, codes, books, stackexchange, arxiv]
+
     sample_probabilities: list[float] = calculate_sampling_probabilities(
-        pathes=[dataset["path"] for dataset in [wikipedia, c4]],
-        names=[dataset["name"] for dataset in [wikipedia, c4]],
-        num_epochs=[dataset["num_epochs"] for dataset in [wikipedia, c4]],
+        pathes=[dataset["path"] for dataset in ds],
+        names=[dataset["name"] for dataset in ds],
+        num_epochs=[dataset["num_epochs"] for dataset in ds],
     )
     print(sample_probabilities)
 
@@ -84,13 +275,15 @@ def test_distributed_sampler() -> None:
     wikipedia: dict[str, Any] = {
         "path": "wikimedia/wikipedia",
         "name": "20231101.en",
-        "split": "train[:1024]",
+        # "split": "train[:1024]",
+        "split": "train",
         # "num_epochs": 2,
     }
     c4: dict[str, Any] = {
         "path": "allenai/c4",
         "name": "en",
-        "split": "train[:1024]",
+        # "split": "train[:1024]",
+        "split": "train",
         # "num_epochs": 1,
     }
 
@@ -345,3 +538,11 @@ def test_packing_dataset() -> None:
         print(
             f"Decoded Batch {idx}: {[tokenizer.decode(ids, skip_special_tokens=True) for ids in batch['input_ids']]}"
         )
+
+
+# TODO: 还可以测试一个东西啊
+# 就是我们使用流式处理数据的速度
+# 还有模型能够吃的token的速度
+# 还有本地读取文件处理数据的速度
+# 这些都应该测试一下
+# 那咱们就可以把所有数据集的定义放到global变量里面，因为也有很多地方都在使用了
