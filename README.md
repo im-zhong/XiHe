@@ -10,6 +10,8 @@ My LLM.
    WANDB_API_KEY=your_wandb_api_key
    ```
 
+2. uv run pre-commit install
+
 ## TODO
 
 1. 2025/7/19

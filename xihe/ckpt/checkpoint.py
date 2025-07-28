@@ -42,15 +42,19 @@ class CheckpointPath:
 
     def find_step_ckpts(self, project_dir: Path) -> list[Path]:
         # project_dir = self.get_ckpts_dir(project)
-        return sorted(project_dir.glob("ckpt_step*.tar"))
+        return sorted(
+            project_dir.glob("ckpt_step*.tar"), key=lambda x: int(x.stem.split("_")[-1])
+        )
 
-    def find_best_ckpt(self, project_dir: Path) -> Path | None:
+    def find_best_ckpt(self, project_dir: Path) -> list[Path]:
         # project_dir = self.get_ckpts_dir(project)
-        pathes = sorted(project_dir.glob("best_ckpt_step*.tar"))
-        if len(pathes) == 0:
-            return None
-        # 这里假设最后一个是最好的
-        return pathes[-1]
+        # 哦！！！不对，这里的排序是不对的！
+        # 我们需要根据step来排序，不能根据字典序来排序！
+
+        return sorted(
+            project_dir.glob("best_ckpt_step*.tar"),
+            key=lambda x: int(x.stem.split("_")[-1]),
+        )
 
     def get_step_ckpt_path(self, project_dir: Path, step: int) -> Path:
         # project_dir = self.get_ckpts_dir(project)
@@ -99,7 +103,7 @@ class Checkpoint:
         # self.current_saved_steps: list[int] = []
 
     def save(self, path: Path) -> None:
-        path.mkdir(exist_ok=True, parents=True)
+        path.parent.mkdir(exist_ok=True, parents=True)
         torch.save(self.get_state_dict(), path)
 
     # def get_best_loss(self) -> float:
@@ -180,8 +184,11 @@ class CheckpointManager:
     # 否则就会被覆盖掉
     # 所以可以做一个检测
     # 这样我们实现起来也比较简单，不需要考虑特别多的复杂的情况
-    def __init__(self, config: Config, ckpt_dir: Path) -> None:
-        self.config = config
+    def __init__(self, keep_num: int, save_steps: int, ckpt_dir: Path) -> None:
+        # 实际上只用了 keep num 和 save steps
+        # 那么我们把config换成这两个参数就好了
+        self.keep_num = keep_num
+        self.save_steps = save_steps
         # read all the checkpoint files in this directory
         self.ckpt_dir = ckpt_dir
 
@@ -202,7 +209,12 @@ class CheckpointManager:
         # 这个东西的名字应该写在defs里面
         self.best_loss = float("inf")
         best_ckpt_path = ckpt_defs.find_best_ckpt(self.ckpt_dir)
-        if best_ckpt_path is not None:
+        # 应该是只有一个的
+        # 但是就算有多个也没关系
+        # 我们就选择最后一个就行了
+        # 其他的都删掉
+        if len(best_ckpt_path) > 0:
+            best_ckpt_path = best_ckpt_path[-1]
             best_ckpt: Checkpoint | None = load_ckpt_from_path(best_ckpt_path)
             if best_ckpt is not None:
                 self.best_loss = best_ckpt.get_loss()
@@ -210,6 +222,19 @@ class CheckpointManager:
         # 这个逻辑还挺绕的
         # best checkpoint需要和step interval checkpoint分开
         # 如果要放在一起保存的话，就会出现多个best的情况
+
+    def clear_checkpoints(self) -> None:
+        # 清空所有的checkpoint文件
+        # 就把ckpt_dir目录下的所有文件都删除掉
+        for file in self.ckpt_dir.iterdir():
+            if file.is_file():
+                file.unlink(missing_ok=True)
+
+        # 重新初始化best_loss
+        self.best_loss = float("inf")
+
+    def get_best_loss(self) -> float:
+        return self.best_loss
 
     # 这里要保存的step 不一定比最大的step大
     # 所以还是需要排序的
@@ -276,6 +301,14 @@ class CheckpointManager:
         checkpoint.save(filename)
         # self.best_ckpt = checkpoint
 
+        # 这里也需要把旧的 best ckpt给删掉啊
+        # 只需要删除旧的best ckpt就行了
+        best_ckpt_path = ckpt_defs.find_best_ckpt(self.ckpt_dir)
+        if len(best_ckpt_path) > 1:
+            # 删除除了最新的best ckpt之外的所有best ckpt
+            for path in best_ckpt_path[:-1]:
+                path.unlink(missing_ok=True)
+
     def load_checkpoints(self, ckpt_dir: Path) -> list[Checkpoint]:
         checkpoint_pathes = ckpt_defs.find_step_ckpts(project_dir=ckpt_dir)
         # 既然我们不需要维护checkpoint对象，也就不需要这些代码了
@@ -298,7 +331,7 @@ class CheckpointManager:
         checkpoints = checkpoints[:index]
 
         # 根据config.checkpoint.keep_num来决定保留多少个checkpoint
-        for ckpt in checkpoints[: -self.config.checkpoint.keep_num]:
+        for ckpt in checkpoints[: -self.keep_num]:
             ckpt_defs.get_step_ckpt_path(
                 project_dir=self.ckpt_dir, step=ckpt.get_step()
             ).unlink(missing_ok=True)
@@ -317,7 +350,7 @@ class CheckpointManager:
         # 需要保存的step是当前的step
         # 如果当前的step大于最大的step，就需要保存
         # 否则就不需要保存
-        return step % self.config.checkpoint.save_steps == 0
+        return step % self.save_steps == 0
 
     def need_save_best(self, loss: float) -> bool:
         # 需要保存的loss是当前的loss
