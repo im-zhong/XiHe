@@ -22,9 +22,8 @@ from wandb.sdk.wandb_run import Run
 # 我感觉也没必要整两个，因为我们就是从Config里面读出来的
 # 他们俩用一个就行了
 # config用schema就行了
-from xihe.ckpt import Checkpoint, CheckpointManager
+from xihe.ckpt import Checkpoint, CheckpointManager, ckpt_defs
 from xihe.dataset import create_dataloader
-from xihe.defs import defs
 from xihe.model import Transformer
 from xihe.optimizer import (
     create_cosine_lr_scheduler,
@@ -63,8 +62,10 @@ class DistributedGPTTrainer:
         # 在启动训练的时候，从哪里读取ckpt文件和把ckpt文件保存在哪个文件夹，并不冲突
         # 但是默认的文件夹应该是project name
         self.ckpt_mgr = CheckpointManager(
-            config=config,
-            ckpt_dir=defs.cache_dir / config.wandb.project,
+            keep_num=config.checkpoint.keep_num,
+            save_steps=config.checkpoint.save_steps,
+            # 这里不对啊
+            ckpt_dir=ckpt_defs.get_ckpts_dir(project=config.wandb.project),
         )
 
     # def get_state_dict(self, step: int):
@@ -212,10 +213,11 @@ class DistributedGPTTrainer:
             run=run,
         )
 
-        start_step = ckpt.get_step() if ckpt else 0
+        start_step = ckpt.get_step() if ckpt else -1
         # Start training
         self.train_loop(
-            start_step=start_step,
+            start_step=start_step + 1,
+            start_num_tokens=ckpt.get_num_tokens() if ckpt else 0,
             model=model,
             dataloader=dataloader,
             trainer=trainer,
@@ -260,9 +262,10 @@ class DistributedGPTTrainer:
     # 多进程的训练写在distributed_pretrain.py里面就可以了
     # TODO: 我们应该先把trainer给跑起来，在上这些东西
     # https://docs.pytorch.org/docs/stable/amp.html
-    def train_loop(
+    def train_loop(  # noqa: PLR0913
         self,
         start_step: int,
+        start_num_tokens: int,
         model: DistributedDataParallel,
         dataloader: StatefulDataLoader,
         trainer: BasicGPTTrainer,
@@ -284,10 +287,22 @@ class DistributedGPTTrainer:
         # TODO: 我记得DDP加载模型还需要barrier来着
 
         model.train()
-        total_num_tokens: int = 0
+        # 这里如果从checkpoint加载的话
+        # 那么就需要从checkpoint中获取num tokens
+        total_num_tokens: int = start_num_tokens
         last_time: float = time.time()
 
-        for step, batch in tqdm(enumerate(dataloader, start=start_step)):
+        for step, batch in tqdm(
+            iterable=enumerate(
+                dataloader, start=start_step
+            ),  # 应该加1吧，或者从外面加一吧
+            desc="Training",
+            initial=start_step,
+            total=self.config.trainer.total_steps,
+        ):
+            if step >= self.config.trainer.total_steps:
+                break
+
             loss: float = trainer.train_step(batch=batch)
 
             # 在这里拿到所有process的loss
@@ -370,6 +385,7 @@ class DistributedGPTTrainer:
                         loss=average_loss,
                         trainer=trainer,
                         gathered_dataloader_state=dataloader_state,
+                        num_tokens=total_num_tokens,
                     )
 
             # TODO：
@@ -414,6 +430,7 @@ class DistributedGPTTrainer:
         step: int,
         loss: float,
         trainer: BasicGPTTrainer,
+        num_tokens: int,
         gathered_dataloader_state: list[Any],
     ) -> None:
         # 这里不对，
@@ -442,6 +459,7 @@ class DistributedGPTTrainer:
             **trainer.get_state_dict(step=step),
             dataloader=gathered_dataloader_state,
             loss=loss,
+            num_tokens=num_tokens,
         )
         self.ckpt_mgr.save_checkpoint(checkpoint=checkpoint)
         # checkpoint.save(

@@ -37,7 +37,9 @@ My LLM.
    4. [x] 实现各种metrics的统计，比如处理token的速率等等
    5. [x] redesign chekcpoint
 7. 2025/7/28
-   1. [ ] add unit test for checkpoint
+   1. [x] add unit test for checkpoint
    2. [ ] 最终确认所有测试用例通过
    3. [ ] 确定XiHe 120M 模型的各种参数
-   4. [ ] 开始模型分布式训练！<https://docs.pytorch.org/tutorials/intermediate/ddp_series_minGPT.html> 又找到一个代码参考源，不过这个也是咱们写完之后对答案用吧
+   4. [ ] 添加模型训练速度的测试
+   5. [ ] 添加数据处理速度的测试
+   6. [ ] 开始模型分布式训练！<https://docs.pytorch.org/tutorials/intermediate/ddp_series_minGPT.html> 又找到一个代码参考源，不过这个也是咱们写完之后对答案用吧

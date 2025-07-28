@@ -1,17 +1,17 @@
 # 2025/7/26
 # zhangzhong
 
+from pathlib import Path
+
 import torch
 from torch.amp.grad_scaler import GradScaler
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LambdaLR
 
 from tests.common import generate_testing_config
-from xihe.ckpt import load_ckpt_from_path
-from xihe.defs import defs
+from xihe.ckpt import ckpt_defs, load_ckpt_from_path
 from xihe.model import Transformer
 from xihe.optimizer import create_cosine_lr_scheduler, create_optimizer
-from xihe.settings import Config
 from xihe.tokenizer import create_tokenizer
 from xihe.trainer import BasicGPTTrainer, DistributedGPTTrainer
 
@@ -125,6 +125,9 @@ def test_distributed_trainer_from_scratch() -> None:
     # 咱们最好不要从example_conf来读
     # 就在这里构造一个config对象就行了 减少对外部的依赖
     config = generate_testing_config()
+    config.trainer.total_steps = 10  # Set total steps for testing
+    config.checkpoint.save_steps = 5
+
     print(f"Config: {config}")
     rank = 0
     world_size = 1
@@ -140,13 +143,21 @@ def test_distributed_trainer_from_scratch() -> None:
 
 # TODO: 怎么model的state dict出错了呢？
 def test_distributed_trainer_from_ckpt() -> None:
-    ckpt_path = defs.get_ckpt_path(project="myllm-pretrain-test", step=10)
+    start_step = 5
+    project = "myllm-pretrain-test"
+
+    ckpt_path: Path = ckpt_defs.get_step_ckpt_path(
+        project_dir=ckpt_defs.get_ckpts_dir(project=project),
+        step=start_step,
+    )
+    print(f"Checkpoint path: {ckpt_path}")
     checkpoint = load_ckpt_from_path(ckpt_path)
     assert checkpoint is not None, "Checkpoint should not be None"
     # get xxx state
     # 我感觉还是给封装一下比较好吧
     # 做一个Checkpoint
-    config: Config = checkpoint.get_config()
+    config = checkpoint.get_config()
+    config.trainer.total_steps = start_step + 5  # Set total steps for testing
 
     rank = 0
     world_size = 1
@@ -157,6 +168,8 @@ def test_distributed_trainer_from_ckpt() -> None:
         config=config,  # Pass the config directly
     )
 
+    # 需要一个方法让训练停止
+    # 我们可以设置一个max step就行了呀
     # TODO: just finish this function, we are almost done!
     trainer.train(
         config=config,  # Pass the config directly

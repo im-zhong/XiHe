@@ -170,7 +170,6 @@ def load_ckpt_from_path(path: Path) -> Checkpoint | None:
         step=checkpoint["step"],
         dataloader=checkpoint["dataloader"],
         loss=checkpoint["loss"],
-        # 消耗的token数量也要保存啊
         num_tokens=checkpoint["num_tokens"],
     )
 
