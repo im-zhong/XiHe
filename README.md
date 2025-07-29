@@ -43,6 +43,13 @@ My LLM.
    4. [x] 添加模型训练速度的测试
 8. 2025/7/29
    1. [x] 优化模型实现，包括RMSNOrm，RoPE，以及我们其他模块的实现，改变一下风格，看看是否对显存和速度有影响
-   2. [ ] 实现梯度累积 gradient accumulation steps
-   3. [ ] 添加数据处理速度的测试
-   4. [ ] 开始模型分布式训练！<https://docs.pytorch.org/tutorials/intermediate/ddp_series_minGPT.html> 又找到一个代码参考源，不过这个也是咱们写完之后对答案用吧
+   2. [x] 实现梯度累积 gradient accumulation steps
+   3. [ ] 开始模型分布式训练！<https://docs.pytorch.org/tutorials/intermediate/ddp_series_minGPT.html> 又找到一个代码参考源，不过这个也是咱们写完之后对答案用吧
+9. 2025/7/30
+   1. [ ] 添加数据处理速度的测试
+   2. [ ] 统一setting里面的batch size
+   3. [ ] 数据处理阶段的map的batch size最好也可以设置
+   4. [ ] 添加日志模块，每个进程独立输出到自己的日志文件，我好方便调试，判断程序是不是正确运行
+   5. [ ] 现在为了方便，trainer no_sync部分的代码通不过pyright，要想个办法改正过来
+   6. [ ] 现在每个进程都会登陆wandb，应该改成只有rank0需要登陆
+   7. [ ] 启动光是加载数据就加载好久啊。。。不行啊，联网读取数据实在是不靠谱，还是在本地启用streaming模式是最好的。

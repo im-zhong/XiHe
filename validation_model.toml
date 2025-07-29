@@ -1,0 +1,91 @@
+[dataloader]
+# sampling_probabilities = [0.5, 0.5]
+# 先不管这些设置了，等基础的代码可以跑起来在说吧
+# streaming = false
+batch_size = 16 # TODO: 这个batch size根本就没有用到过
+
+[[dataloader.datasets]]
+path = "allenai/c4"
+name = "en"
+split = "train"
+streaming = true
+num_epochs = 1
+
+[[dataloader.datasets]]
+path = "wikimedia/wikipedia"
+name = "20231101.en"
+split = "train"
+streaming = true
+num_epochs = 2
+
+[[dataloader.datasets]]
+path = "nampdn-ai/tiny-codes"
+split = "train"
+streaming = true
+num_epochs = 2
+
+[[dataloader.datasets]]
+path = "eminorhan/gutenberg_en"
+name = "chunk_size_1024"
+split = "train"
+streaming = true
+num_epochs = 2
+
+[[dataloader.datasets]]
+path = "donfu/oa-stackexchange"
+split = "train"
+streaming = true
+num_epochs = 1
+
+[[dataloader.datasets]]
+path = "common-pile/arxiv_papers"
+split = "train"
+streaming = true
+num_epochs = 1
+
+[tokenizer]
+# tokenizer_file = "gpt2"
+tokenizer_name = "gpt2"
+# vocab_size = 50257
+
+
+[model]
+model_name = "XiHe"
+context_length = 1024
+num_layers = 6           # 12 / 2
+hidden_size = 768
+num_heads = 12
+intermediate_size = 3072
+mixed_precision = true
+# dtype = "float32"
+# low_precision_dtype = "float16"
+
+
+[trainer]
+checkpoint_dir = "checkpoints"
+batch_size = 128                # 实际使用的是这个batch size
+gradient_accumulation_steps = 8
+warmup_steps = 2000
+total_steps = 200000
+device = "cuda"
+
+
+# we only use cosine scheduler
+[optimizer]
+optimizer_name = "AdamW"
+initial_lr = 5e-5
+max_lr = 1e-4
+final_lr = 1e-5
+weight_decay = 0.01
+max_grad_norm = 1.0
+
+
+[wandb]
+entity = "im-zhong-org"
+project = "validation-model-001"
+id = "a2ab6ca6-6964-42bc-8710-271c8d48f502"
+
+
+[checkpoint]
+keep_num = 5
+save_steps = 1000
