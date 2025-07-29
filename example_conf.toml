@@ -40,6 +40,7 @@ mixed_precision = false
 [trainer]
 checkpoint_dir = "checkpoints"
 batch_size = 8
+gradient_accumulation_steps = 4
 warmup_steps = 2000
 total_steps = 200000
 device = "cuda"

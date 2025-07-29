@@ -29,6 +29,7 @@ class BasicGPTTrainer:
         scheduler: LambdaLR,
         # dataloader: StatefulDataLoader,
         grad_scaler: GradScaler,
+        accumulation_gradient_steps: int,
         # rank: int,
         # world_size: int,
         max_norm: float = 1.0,
@@ -41,6 +42,7 @@ class BasicGPTTrainer:
         # 然后模型又to cuda了，这样写是不是不对的？
         # 果然是不对的，
     ) -> None:
+        self.accumulation_steps = accumulation_gradient_steps
         self.vocab_size = vocab_size
         # self.config = settings
         # Initialize model, tokenizer, optimizer, etc. based on the config
@@ -61,19 +63,11 @@ class BasicGPTTrainer:
 
     # 咱们写两个版本的trainer 看看显存占用吧
 
-    def train_step(self, batch: dict[str, Tensor]) -> float:
-        self.optimizer.zero_grad()
-
-        # 为什么这里运行第二次的显存会增加？
-        # 是不是代码有些地方写的效率比较低？怎么可以优化一下？
-
-        # 因为咱也没有支持bfloat16的设置，所以就不进行配置了
-        inputs = batch["input_ids"].to(self.device)
-        labels = inputs.clone()  # For simplicity, using inputs as labels
-        labels = labels[:, 1:].contiguous()
+    def calculate_loss(self, inputs: Tensor, labels: Tensor) -> Tensor:
         # labels.shape = [batch_size, seq_length]
         # labels = batch["labels"].to(self.device)
         # self.grad_scaler.
+        # 下面这段代码是重复的，提取出来吧
         with torch.autocast(
             device_type="cuda",
             dtype=torch.float16,
@@ -93,10 +87,77 @@ class BasicGPTTrainer:
                 logits.view(-1, self.vocab_size),
                 labels.view(-1),
             )
+            return loss / self.accumulation_steps
 
-        # loss_item = float(loss.item())
+    # 应该在这里实现acc grad？
+    # 那这样的话，这个batch就必须是一个大的batch
+    # 因为要除以 acc grad steps
+    # 这样设计也好，对外的表现是统一的，符合开闭原则
+    def train_step(self, batch: dict[str, Tensor]) -> float:
+        self.optimizer.zero_grad()
 
-        # Scales loss. Calls ``backward()`` on scaled loss to create scaled gradients.
+        # 为什么这里运行第二次的显存会增加？
+        # 是不是代码有些地方写的效率比较低？怎么可以优化一下？
+
+        # 因为咱也没有支持bfloat16的设置，所以就不进行配置了
+        inputs = batch["input_ids"].to(self.device)
+        labels = inputs.clone()  # For simplicity, using inputs as labels
+        labels = labels[:, 1:].contiguous()
+
+        # https://docs.pytorch.org/docs/stable/generated/torch.split.html
+        # Splits the tensor into chunks. Each chunk is a view of the original tensor.
+        # If split_size_or_sections is an integer type, then tensor will be split into equally sized chunks (if possible).
+        # Last chunk will be smaller if the tensor size along the given dimension dim is not divisible by split_size.
+        # https://docs.pytorch.org/docs/stable/generated/torch.chunk.html
+        # chunk更合适一下，不用我们自己计算split size
+        # If the tensor size along the given dimension dim is divisible by chunks, all returned chunks will be the same size. If the tensor size along the given dimension dim is not divisible by chunks, all returned chunks will be the same size, except the last one. If such division is not possible, this function may return fewer than the specified number of chunks.
+        # split_size = inputs.shape[0] // self.accumulation_steps
+        inputs_splits: tuple[Tensor, ...] = inputs.chunk(
+            chunks=self.accumulation_steps, dim=0
+        )
+        labels_splits: tuple[Tensor, ...] = labels.chunk(
+            chunks=self.accumulation_steps, dim=0
+        )
+        # 我懂了！是split的不对！
+        assert len(inputs_splits) == len(labels_splits)
+        assert len(inputs_splits) == self.accumulation_steps
+
+        losses: Tensor = torch.zeros(
+            size=(self.accumulation_steps,), device=self.device, dtype=torch.float32
+        )
+
+        # no_sync_or_null = (
+        #     self.model.no_sync()
+        #     if isinstance(self.model, DistributedDataParallel)
+        #     else contextlib.nullcontext()
+        # )
+
+        # 假设一个数字吧，好讨论
+        # 假设 acc = 8
+        # 在前七个batch上都不进行梯度更新
+        # 只在第八个batch上进行梯度更新
+        # TODO：直接把咱们整理好的代码复制过来就行了，应该
+        for i, (inputs_sub, labels_sub) in enumerate(
+            iterable=zip(inputs_splits[:-1], labels_splits[:-1], strict=True)
+        ):
+            # 这里的inputs和labels都是 [batch_size, seq_length]
+            # inputs.shape = [batch_size, seq_length]
+            # labels.shape = [batch_size, seq_length]
+
+            # only when model is DDP, there is a no_sync context manager
+            # so, my basic trainer test will fail
+
+            # with no_sync_or_null:
+            with self.model.no_sync():  # type: ignore
+                loss = self.calculate_loss(inputs_sub, labels_sub)
+                losses[i] = loss.detach()
+                # Scales loss. Calls ``backward()`` on scaled loss to create scaled gradients.
+                self.grad_scaler.scale(loss).backward()
+
+        # 最后一个batch, 这一段应该和最开始的代码是一样的才对
+        loss = self.calculate_loss(inputs_splits[-1], labels_splits[-1])
+        losses[-1] = loss.detach()
+
         self.grad_scaler.scale(loss).backward()
 
         # 我们在这里需要unscale 因为需要做clip
@@ -133,7 +194,9 @@ class BasicGPTTrainer:
         # if step % self.config.save_steps == 0:
         #     # Save model checkpoint
         #     self.save_model()
-        return 100
+        # TODO：为什么这么多零啊
+        # print(losses, flush=True)
+        return losses.mean().item()
 
     def get_model_state_dict(self) -> dict[str, Any]:
         match self.model:

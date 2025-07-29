@@ -155,6 +155,7 @@ def test_basic_gpt_trainer() -> None:
         # rank=rank,
         # world_size=world_size,
         device=device,
+        accumulation_gradient_steps=1,
     )
 
     for _ in tqdm(range(total_steps), desc="Training Steps", total=total_steps):

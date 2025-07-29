@@ -115,6 +115,10 @@ class TrainerConfig(BaseModel):
         "cuda",
         description="Device to run the training on. Default is 'cuda'.",
     )
+    gradient_accumulation_steps: int = Field(
+        ...,
+        description="Number of gradient accumulation steps. Default is 1.",
+    )
 
 
 class OptimizerConfig(BaseModel):

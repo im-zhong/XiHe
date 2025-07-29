@@ -70,7 +70,8 @@ def test_basic_gpt_trainer() -> None:
     # 最大的batchsize就是8
     # 而且context length只能是1024
     # 显存根本不够啊
-    batch_size = 4
+    batch_size = 32
+    accumulation_gradient_steps = 32 // 4
 
     model = Transformer(
         vocab_size=vocab_size,
@@ -104,7 +105,7 @@ def test_basic_gpt_trainer() -> None:
     print(f"Optimizer: {optimizer}")
 
     warmup_steps = 10
-    total_steps = 100
+    total_steps = 20
     max_lr = 1e-3
     final_lr = 1e-5
 
@@ -134,6 +135,7 @@ def test_basic_gpt_trainer() -> None:
         # rank=rank,
         # world_size=world_size,
         device=device,
+        accumulation_gradient_steps=accumulation_gradient_steps,
     )
 
     for _ in tqdm(range(total_steps), desc="Training Steps", total=total_steps):

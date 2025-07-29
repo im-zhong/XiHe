@@ -42,7 +42,7 @@ My LLM.
    3. [x] 确定XiHe 120M 模型的各种参数
    4. [x] 添加模型训练速度的测试
 8. 2025/7/29
-   1. [ ] 优化模型实现，包括RMSNOrm，RoPE，以及我们其他模块的实现，改变一下风格，看看是否对显存和速度有影响
+   1. [x] 优化模型实现，包括RMSNOrm，RoPE，以及我们其他模块的实现，改变一下风格，看看是否对显存和速度有影响
    2. [ ] 实现梯度累积 gradient accumulation steps
    3. [ ] 添加数据处理速度的测试
    4. [ ] 开始模型分布式训练！<https://docs.pytorch.org/tutorials/intermediate/ddp_series_minGPT.html> 又找到一个代码参考源，不过这个也是咱们写完之后对答案用吧

@@ -167,6 +167,8 @@ class DistributedGPTTrainer:
         if ckpt:
             local_model.load_state_dict(ckpt.get_model_state_dict())
         local_model = local_model.to(config.trainer.device)
+        # 应该是在ddp之前compile？
+        local_model = torch.compile(local_model)
         # TODO: need to call init_process_group, but where?
         model = DistributedDataParallel(module=local_model, device_ids=[rank])
 
@@ -193,15 +195,15 @@ class DistributedGPTTrainer:
             lr_scheduler.load_state_dict(ckpt.get_scheduler_state_dict())
 
         grad_scaler = GradScaler(
-            "cuda", enabled=config.model.mixed_precision
+            device="cuda", enabled=config.model.mixed_precision
         )  # Enable mixed precision training
         if ckpt:
             grad_scaler.load_state_dict(ckpt.get_grad_scaler_state_dict())
 
         # # Initialize the trainer
         trainer = BasicGPTTrainer(
-            rank=rank,
-            world_size=world_size,
+            # rank=rank,
+            # world_size=world_size,
             grad_scaler=grad_scaler,
             vocab_size=tokenizer.vocab_size,
             model=model,
@@ -211,6 +213,7 @@ class DistributedGPTTrainer:
             device=config.trainer.device,
             # dtype=config.model.dtype,
             run=run,
+            accumulation_gradient_steps=config.trainer.gradient_accumulation_steps,
         )
 
         start_step = ckpt.get_step() if ckpt else -1

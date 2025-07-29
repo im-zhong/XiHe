@@ -99,6 +99,7 @@ def generate_testing_config() -> Config:
             warmup_steps=2000,
             total_steps=200000,
             device="cuda",
+            gradient_accumulation_steps=4,
         ),
         optimizer=OptimizerConfig(
             optimizer_name="AdamW",
