@@ -64,6 +64,7 @@ repos:
       # Run the linter.
       - id: ruff
         args: [--fix]
+        exclude: retriever.py
       # Run the formatter.
       - id: ruff-format
 
@@ -75,3 +76,4 @@ repos:
         args: []
         # 卧槽！成了，真的管用！
         language: system
+        exclude: retriever.py

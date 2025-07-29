@@ -1,7 +1,4 @@
-# 2025/7/26
-# zhangzhong
-
-from pathlib import Path
+from dataclasses import dataclass
 
 import torch
 from torch.amp.grad_scaler import GradScaler
@@ -9,11 +6,30 @@ from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LambdaLR
 from tqdm import tqdm
 
-from tests.common import generate_testing_config
-from xihe.ckpt import ckpt_defs, load_ckpt_from_path
 from xihe.model import Transformer
 from xihe.optimizer import create_cosine_lr_scheduler, create_optimizer
-from xihe.trainer import BasicGPTTrainer, DistributedGPTTrainer
+from xihe.trainer import BasicGPTTrainer
+
+
+@dataclass
+class RetrieverConfig_medium:
+    gpu_num = 3
+    batch_size = 16
+    gradient_accumulation_steps = 8
+    sequence_length = 1024
+    learning_rate = 6e-4
+    min_lr = 6e-5
+    vocab_size = 32000
+    num_layers = 12
+    hidden_size = 768
+    num_heads = 12
+    beta1 = 0.9
+    beta2 = 0.95
+    weight_decay = 1e-1
+    warmup_iters = 2000
+    max_iters = 200000
+    lr_decay_iters = 200000
+    grad_clip = 1.0
 
 
 def test_basic_gpt_trainer() -> None:
@@ -22,7 +38,9 @@ def test_basic_gpt_trainer() -> None:
 
     torch.cuda.set_device(0)
 
+    config = RetrieverConfig_medium()
     # rank = 0
+
     # world_size = 4
     # batch_size = 4
     # context_length = 1024
@@ -52,26 +70,31 @@ def test_basic_gpt_trainer() -> None:
     # print(f"Dataloader: {dataloader}")
 
     # gpt3 small
-    # vocab_size = 50257  # GPT-3 uses a vocabulary size of 50257
-    # hidden_size = 768
-    # num_layers = 12
-    # num_heads = 12
-    # intermediate_size = hidden_size * 4
-    # context_length = 1024
+    vocab_size = 32000  # GPT-3 uses a vocabulary size of 50257
+    hidden_size = 768
+    num_layers = 12
+    num_heads = 12
+    # 不过可能是这里的原因，retrieve是 * 2.66
+    # 不过也差不多啦
+    intermediate_size = hidden_size * 2
+    context_length = 1024
 
     # gpt3 medium: 454166528, 454M
-    vocab_size = 32000  # GPT-3 uses a vocabulary size of 50257
-    hidden_size = 1024
-    num_layers = 24
-    num_heads = 16
-    intermediate_size = hidden_size * 4
-    context_length = 1024
+    # vocab_size = 32000  # GPT-3 uses a vocabulary size of 50257
+    # hidden_size = 1024
+    # num_layers = 24
+    # num_heads = 16
+    # intermediate_size = hidden_size * 4
+    # context_length = 1024
     device = "cuda:0"
     # 最大的batchsize就是8
     # 而且context length只能是1024
     # 显存根本不够啊
-    batch_size = 4
+    batch_size = 16  # + 8  # 这个batch 非常接近极限了，还是用16吧
 
+    # 13884MiB
+    # 4.29it/s
+    # 没有我自己实现的好啊
     model = Transformer(
         vocab_size=vocab_size,
         max_seq_len=context_length,
@@ -81,15 +104,11 @@ def test_basic_gpt_trainer() -> None:
         intermediate_size=intermediate_size,
         device=device,  # Pass the device from config
     )
+    # 14328Mi
+    # 3.8it/s
+    # model = Retriever(device=device, ptdtype=torch.float16, config=config)
     model = model.to(device)
-    # 可以compile哎, 这个是什么功能？
-    # ！不仅更快了，显存占用也更低了！这个东西好啊！！！
-    # 大概是3.66it/s
-    # 显存只有12G了
-    # model = torch.compile(model)
-    # 不做compile
-    # 2.8it/s
-    # 显存占用是15G
+    model = torch.compile(model)
     print(f"Model: {model}")
 
     optimizer_name = "adamw"
@@ -145,60 +164,3 @@ def test_basic_gpt_trainer() -> None:
 
     # state_dict = trainer.get_state_dict(step=0)
     # print(f"Trainer state dict: {state_dict}")
-
-
-def test_distributed_trainer_from_scratch() -> None:
-    # 那么这里就要先构造一个config对象
-    # 咱们最好不要从example_conf来读
-    # 就在这里构造一个config对象就行了 减少对外部的依赖
-    config = generate_testing_config()
-    config.trainer.total_steps = 10  # Set total steps for testing
-    config.checkpoint.save_steps = 5
-
-    print(f"Config: {config}")
-    rank = 0
-    world_size = 1
-    trainer = DistributedGPTTrainer(
-        rank=rank,
-        world_size=world_size,  # For testing, we can use a single process
-        run=None,  # No wandb run for this test
-        config=config,  # Pass the config directly
-    )
-
-    trainer.train(config=config)
-
-
-# TODO: 怎么model的state dict出错了呢？
-def test_distributed_trainer_from_ckpt() -> None:
-    start_step = 5
-    project = "myllm-pretrain-test"
-
-    ckpt_path: Path = ckpt_defs.get_step_ckpt_path(
-        project_dir=ckpt_defs.get_ckpts_dir(project=project),
-        step=start_step,
-    )
-    print(f"Checkpoint path: {ckpt_path}")
-    checkpoint = load_ckpt_from_path(ckpt_path)
-    assert checkpoint is not None, "Checkpoint should not be None"
-    # get xxx state
-    # 我感觉还是给封装一下比较好吧
-    # 做一个Checkpoint
-    config = checkpoint.get_config()
-    config.trainer.total_steps = start_step + 5  # Set total steps for testing
-
-    rank = 0
-    world_size = 1
-    trainer = DistributedGPTTrainer(
-        rank=rank,
-        world_size=world_size,  # For testing, we can use a single process
-        run=None,  # No wandb run for this test
-        config=config,  # Pass the config directly
-    )
-
-    # 需要一个方法让训练停止
-    # 我们可以设置一个max step就行了呀
-    # TODO: just finish this function, we are almost done!
-    trainer.train(
-        config=config,  # Pass the config directly
-        ckpt=checkpoint,  # Load from the checkpoint
-    )

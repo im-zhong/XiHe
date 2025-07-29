@@ -261,3 +261,67 @@ def test_transformer_state_dict() -> None:
     print("State dict keys:", state_dict.keys())
 
     transformer.load_state_dict(state_dict)
+
+
+# 参考gpt3 small的参数量
+# https://arxiv.org/pdf/2005.14165
+# Model Name nparams nlayers dmodel nheads dhead Batch Size Learning Rate
+# GPT-3 Small 125M 12 768 12 64 0.5M 6.0 × 10−4
+def test_gpt3_small() -> None:
+    torch.cuda.set_device(0)
+
+    # gpt3 small
+    # vocab_size = 50257  # GPT-3 uses a vocabulary size of 50257
+    # hidden_size = 768
+    # num_layers = 12
+    # num_heads = 12
+    # intermediate_size = hidden_size * 4
+    # max_seq_len = 2048
+
+    # gpt3 medium: 454166528, 454M
+    vocab_size = 50257  # GPT-3 uses a vocabulary size of 50257
+    hidden_size = 1024
+    num_layers = 24
+    num_heads = 16
+    intermediate_size = hidden_size * 4
+    max_seq_len = 2048
+
+    # 只有800多M？
+    device = "cuda:0"
+    transformer = Transformer(
+        vocab_size=vocab_size,
+        hidden_size=hidden_size,
+        num_layers=num_layers,
+        num_heads=num_heads,
+        intermediate_size=intermediate_size,
+        max_seq_len=max_seq_len,
+        device=device,
+    )
+    transformer = transformer.to(device)
+    print(transformer)
+    # 怎么输出一个模型的参数量呢？
+    # 我记得有个库来着
+    # 叫做torchinfo
+
+    # Trainable parameters: 151862784， 151M
+    trainable_params = sum(
+        p.numel() for p in transformer.parameters() if p.requires_grad
+    )
+    print(f"Trainable parameters: {trainable_params}")
+
+    # 测试输入
+    # batch_size = 1
+
+    # summary(transformer, input_size=(batch_size, max_seq_len), device=device)
+    # tokens = torch.randint(
+    #     low=0,
+    #     high=vocab_size,
+    #     size=(batch_size, max_seq_len),
+    #     device=device,
+    # )
+    # output: Tensor = transformer(tokens)
+
+    # train loop
+    # 卧槽，还不行，想要测试
+    # 实际train一下看看占用多少显存吧
+    #

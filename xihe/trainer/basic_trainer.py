@@ -29,8 +29,8 @@ class BasicGPTTrainer:
         scheduler: LambdaLR,
         # dataloader: StatefulDataLoader,
         grad_scaler: GradScaler,
-        rank: int,
-        world_size: int,
+        # rank: int,
+        # world_size: int,
         max_norm: float = 1.0,
         run: Run | None = None,
         device: str = "cuda",
@@ -55,18 +55,22 @@ class BasicGPTTrainer:
         self.run = run
         self.max_norm = max_norm
         self.grad_scaler = grad_scaler
-        self.rank = rank
-        self.world_size = world_size
+        # self.rank = rank
+        # self.world_size = world_size
         self.loss_fn = torch.nn.CrossEntropyLoss()
+
+    # 咱们写两个版本的trainer 看看显存占用吧
 
     def train_step(self, batch: dict[str, Tensor]) -> float:
         self.optimizer.zero_grad()
 
+        # 为什么这里运行第二次的显存会增加？
+        # 是不是代码有些地方写的效率比较低？怎么可以优化一下？
+
         # 因为咱也没有支持bfloat16的设置，所以就不进行配置了
         inputs = batch["input_ids"].to(self.device)
-        inputs = inputs.to(self.device)
         labels = inputs.clone()  # For simplicity, using inputs as labels
-        shifted_labels = labels[:, 1:].contiguous()
+        labels = labels[:, 1:].contiguous()
         # labels.shape = [batch_size, seq_length]
         # labels = batch["labels"].to(self.device)
         # self.grad_scaler.
@@ -82,15 +86,15 @@ class BasicGPTTrainer:
             # 需要手动将logits和labels shift一下
             # logits的最后一个不要，因为那是整个序列的预测 我们没有他的golden
             # labels的第一个不要，因为没有对应的logits预测
-            shifted_logits = logits[:, :-1, :].contiguous()
+            logits = logits[:, :-1, :].contiguous()
 
             # https://docs.pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html
             loss: Tensor = self.loss_fn(
-                shifted_logits.view(-1, self.vocab_size),
-                shifted_labels.view(-1),
+                logits.view(-1, self.vocab_size),
+                labels.view(-1),
             )
 
-        loss_item = float(loss.item())
+        # loss_item = float(loss.item())
 
         # Scales loss. Calls ``backward()`` on scaled loss to create scaled gradients.
         self.grad_scaler.scale(loss).backward()
@@ -119,13 +123,17 @@ class BasicGPTTrainer:
         # Update the learning rate
         self.scheduler.step()
 
+        # 试一下清空缓存
+        # 作用不大，而且速度变慢了
+        # torch.cuda.empty_cache()
+
         # if step % self.config.logging_steps == 0:
         #     print(f"Step {step}, Loss: {loss.item()}")
 
         # if step % self.config.save_steps == 0:
         #     # Save model checkpoint
         #     self.save_model()
-        return loss_item
+        return 100
 
     def get_model_state_dict(self) -> dict[str, Any]:
         match self.model:

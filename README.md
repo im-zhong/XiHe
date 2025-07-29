@@ -38,8 +38,11 @@ My LLM.
    5. [x] redesign chekcpoint
 7. 2025/7/28
    1. [x] add unit test for checkpoint
-   2. [ ] 最终确认所有测试用例通过
-   3. [ ] 确定XiHe 120M 模型的各种参数
-   4. [ ] 添加模型训练速度的测试
-   5. [ ] 添加数据处理速度的测试
-   6. [ ] 开始模型分布式训练！<https://docs.pytorch.org/tutorials/intermediate/ddp_series_minGPT.html> 又找到一个代码参考源，不过这个也是咱们写完之后对答案用吧
+   2. [x] 最终确认所有测试用例通过
+   3. [x] 确定XiHe 120M 模型的各种参数
+   4. [x] 添加模型训练速度的测试
+8. 2025/7/29
+   1. [ ] 优化模型实现
+   2. [ ] 实现梯度累积 gradient accumulation steps
+   3. [ ] 添加数据处理速度的测试
+   4. [ ] 开始模型分布式训练！<https://docs.pytorch.org/tutorials/intermediate/ddp_series_minGPT.html> 又找到一个代码参考源，不过这个也是咱们写完之后对答案用吧
