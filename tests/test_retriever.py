@@ -96,6 +96,7 @@ def test_basic_gpt_trainer() -> None:
     # 4.29it/s
     # 没有我自己实现的好啊
     # 把我们自己的RMS换成torch.nn.RMSNorm 显存不变，速度不变
+    # 优化了RoPE的实现，没有任何的影响
     model = Transformer(
         vocab_size=vocab_size,
         max_seq_len=context_length,

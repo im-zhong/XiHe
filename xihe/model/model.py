@@ -48,22 +48,45 @@ class RMSNorm(nn.Module):
 # 我们只需要保存数个2x2的旋转矩阵就行了
 # 然后再做矩阵乘法的时候，也可以用bmm来做，然后再做reshape就行了
 # 这样的实现肯定是更加高效的
-class RotaryPositionalEmbedding:
-    def __init__(self, dim: int, max_seq_len: int, device: str = "cpu") -> None:
+class RotaryPositionalEmbedding(nn.Module):
+    # 为registerbuffer提供类型注释
+    cos_theta: Tensor
+    sin_theta: Tensor
+
+    # 这里的dim是什么?
+    def __init__(self, head_dim: int, max_seq_len: int) -> None:
+        super().__init__()
         # dim: 维度
         # max_seq_len: 最大序列长度
         # 这个类的作用是计算RoPE中的R矩阵
         # 然后在forward中应用到输入的tensor上
-        self.dim = dim
+        self.head_dim = head_dim
         self.max_seq_len = max_seq_len
+
+        # https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.register_buffer
 
         # 计算R矩阵
         # shape = (max_seq_len, dim // 2, 2, 2)
-        cos_threa, sin_threa = self.calculate_r_matrix(dim, max_seq_len)
-        self.cos_threa = cos_threa.to(device)
-        self.sin_threa = sin_threa.to(device)
+        cos_theta, sin_theta = self.calculate_r_matrix(head_dim, max_seq_len)
+
+        # 我在这里显示的改成 to float16 还是对显存和速度没有丝毫的影响
+        cos = (
+            cos_theta.view(1, 1, max_seq_len, head_dim // 2)
+            # .to(torch.float16)
+            .contiguous()
+        )
+        sin = (
+            sin_theta.view(1, 1, max_seq_len, head_dim // 2)
+            # .to(torch.float16)
+            .contiguous()
+        )
+
+        # self.cos_threa = cos_threa.to(device)
+        # self.sin_threa = sin_threa.to(device)
         # self.cos_threa = cos_threa
         # self.sin_threa = sin_threa
+        self.register_buffer(name="cos_theta", tensor=cos, persistent=False)
+        self.register_buffer(name="sin_theta", tensor=sin, persistent=False)
 
     # TODO
     # 卧槽，忘了，还需要设置dtype，因为我们想要使用bfloat16
@@ -115,6 +138,7 @@ class RotaryPositionalEmbedding:
 
     # 然后就是传入一个tensor，我们对其应用rotary positional embedding
     # 我们也不取长度了
+    # def forward(self, tensor: Tensor) -> Tensor:
     def apply_rope(self, tensor: Tensor) -> Tensor:
         # 传入的tensor和返回的tensor的shape必须是一样的
         # 我们不在呼tensor的shape
@@ -131,8 +155,8 @@ class RotaryPositionalEmbedding:
 
         dim: int = tensor.shape[-1]
         # 因为我们的旋转矩阵是预选计算的，所以我们必须保证传入的tensor的dim和初始化的dim是一致的
-        if dim != self.dim:
-            msg = f"dim {dim} must be equal to the initialized dim {self.dim} to apply RoPE!"
+        if dim != self.head_dim:
+            msg = f"dim {dim} must be equal to the initialized dim {self.head_dim} to apply RoPE!"
             raise ValueError(msg)
         # the last dim must be even
         if dim % 2 != 0:
@@ -160,16 +184,22 @@ class RotaryPositionalEmbedding:
         # cos 和 sin 需要做broadcast
         # TIPs: 这里想做broadcast 必须对输入向量的shape进行规定
 
-        cos = self.cos_threa.view(1, 1, seq_len, head_dim // 2)
-        sin = self.sin_threa.view(1, 1, seq_len, head_dim // 2)
+        # 这个可以提前展开，不需要每次apply都做reshape
+        # cos = self.cos_theta.view(1, 1, seq_len, head_dim // 2)
+        # sin = self.sin_theta.view(1, 1, seq_len, head_dim // 2)
         # rotate
-        x0 = x[..., 0] * cos - x[..., 1] * sin
-        x1 = x[..., 0] * sin + x[..., 1] * cos
+        # 仍然没有任何的提升。。。
+        # cos = self.cos_theta
+        # sin = self.sin_theta
+        x0 = x[..., 0] * self.cos_theta - x[..., 1] * self.sin_theta
+        x1 = x[..., 0] * self.sin_theta + x[..., 1] * self.cos_theta
         # x0, x1 shape = (*, head_dim//2)
         # 然后再concat起来
         output = torch.stack([x0, x1], dim=-1).flatten(start_dim=-2)
         assert output.shape == tensor.shape
-        return output
+        # 和llama里面的实现一样，加上一个typeas 可能传进来的是float16的 可能能降低显存吧
+        # 这里llama和retriever都转换了类型，和输入类型一致，不过经过我的测试，对显存占用和速度没有任何影响
+        return output.contiguous().type_as(tensor)
 
 
 class MultiHeadSelfAttention(nn.Module):
@@ -356,7 +386,7 @@ class Transformer(nn.Module):
         max_seq_len: int = 2048,
     ) -> None:
         super().__init__()
-
+        self.device = device
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_layers = num_layers
@@ -365,9 +395,7 @@ class Transformer(nn.Module):
         self.max_seq_len = max_seq_len
 
         self.token_embedding = nn.Embedding(vocab_size, hidden_size)
-        self.rope = RotaryPositionalEmbedding(
-            hidden_size // num_heads, max_seq_len, device=device
-        )
+        self.rope = RotaryPositionalEmbedding(hidden_size // num_heads, max_seq_len)
 
         self.layers = nn.ModuleList(
             [

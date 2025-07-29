@@ -135,8 +135,17 @@ def test_rotary_matrices() -> None:
     freqs_cis_real = torch.view_as_real(freqs_cis)
     assert freqs_cis_real.shape == (seq_len, dim // 2, 2)
 
-    rope = RotaryPositionalEmbedding(dim=dim, max_seq_len=seq_len)
-    rotary_matrices = torch.stack([rope.cos_threa, rope.sin_threa], dim=-1)
+    rope = RotaryPositionalEmbedding(head_dim=dim, max_seq_len=seq_len)
+    # 因为我们修改了RoPE的实现，现在的cos和sin的shape确实不对了
+    # 我们要复原他的shape，然后再做测试
+    #
+    rotary_matrices = torch.stack(
+        [
+            rope.cos_theta.view(seq_len, dim // 2),  # type: ignore
+            rope.sin_theta.view(seq_len, dim // 2),  # type: ignore
+        ],
+        dim=-1,
+    )
     assert rotary_matrices.shape == (seq_len, dim // 2, 2)
 
     # yes! 过测试啦！！！
@@ -146,7 +155,7 @@ def test_rotary_matrices() -> None:
 def test_rope() -> None:
     head_dim = 64
     max_seq_len = 2048
-    rope = RotaryPositionalEmbedding(dim=head_dim, max_seq_len=max_seq_len)
+    rope = RotaryPositionalEmbedding(head_dim=head_dim, max_seq_len=max_seq_len)
 
     batch_size = 32
     num_heads = 8
