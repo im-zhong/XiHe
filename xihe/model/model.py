@@ -320,9 +320,11 @@ class TransformerBlock(nn.Module):
 
         # TODO: norm应该作用在整个向量上，还是作用在一个头上？
         self.norm1 = RMSNorm(hidden_size)
+        # self.norm1 = nn.RMSNorm(hidden_size)
         self.attention = MultiHeadSelfAttention(hidden_size, num_heads)
 
         self.norm2 = RMSNorm(hidden_size)
+        # self.norm2 = nn.RMSNorm(hidden_size)
         self.ffn = FeedForward(hidden_size, intermediate_size)
 
     def forward(
@@ -375,6 +377,7 @@ class Transformer(nn.Module):
         )
 
         self.norm = RMSNorm(hidden_size)
+        # self.norm = nn.RMSNorm(hidden_size)
         self.output = nn.Linear(hidden_size, vocab_size, bias=False)
         # shared embedding and output layer
         # self.token_embedding.weight = self.output.weight
