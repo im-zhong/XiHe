@@ -49,12 +49,15 @@ My LLM.
    1. [ ] 添加数据处理速度的测试
    2. [x] 统一setting里面的batch size
    3. [x] 数据处理阶段的map的batch size最好也可以设置
-   4. [ ] 添加日志模块，每个进程独立输出到自己的日志文件，我好方便调试，判断程序是不是正确运行
-   5. [ ] 现在为了方便，trainer no_sync部分的代码通不过pyright，要想个办法改正过来
+   4. [x] 添加日志模块，每个进程独立输出到自己的日志文件，我好方便调试，判断程序是不是正确运行。在重构的过程中逐渐的添加日志吧。
+   5. [x] 现在为了方便，trainer no_sync部分的代码通不过pyright，要想个办法改正过来。把这个该镇过来，所有的测试都应该通过。再把第一个任务做了。都做完了，去锻炼。回来重构。
    6. [x] 现在每个进程都会登陆wandb，应该改成只有rank0需要登陆
    7. [x] 启动光是加载数据就加载好久啊。。。不行啊，联网读取数据实在是不靠谱，还是在本地启用streaming模式是最好的。
    8. [x] create dataset根据streaming模式判断怎么获取features name
    9. [x] 查清并解决从本地加载数据集非常慢的问题，而且每个进程都会加载一次也太奇怪了，chatgpt说可以先加载然后dataset.save_to_disk，然后load_from_disk咱们可以试一下。而且好像显示指定了cache_dir加载也快了一些了。第一次加载之后，之后再加载会稍快一些，但是还是很慢。
    10. [x] 为什么wandb会登陆四次呢？应该只在rank=0上处理任何与wandb有关的逻辑才对
    11. [x] dataset处理数据的batch size太小了，导致每个step都需要读取数据进行处理，咱们把batch size搞大一点
-   12. [ ] PackingDataset有冗余，重构一下
+   12. [ ] 搞清楚为什么gpu0占用的显存会多一些。
+   13. [ ] Token indices sequence length is longer than the specified maximum sequence length for this model (8668 > 1024). Running this sequence through the model will result in indexing errors 为什么会有这个提示？
+   14. [ ] PackingDataset有冗余，重构一下
+   15. [ ] 上面的都改完之后，每个模块都重构一下吧。

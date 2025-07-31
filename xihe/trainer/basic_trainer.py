@@ -3,6 +3,7 @@
 #
 
 # https://docs.pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.LambdaLR.html
+import contextlib
 from typing import Any
 
 import torch
@@ -126,11 +127,11 @@ class BasicGPTTrainer:
             size=(self.accumulation_steps,), device=self.device, dtype=torch.float32
         )
 
-        # no_sync_or_null = (
-        #     self.model.no_sync()
-        #     if isinstance(self.model, DistributedDataParallel)
-        #     else contextlib.nullcontext()
-        # )
+        no_sync_or_null = (
+            self.model.no_sync
+            if isinstance(self.model, DistributedDataParallel)
+            else contextlib.nullcontext
+        )
 
         # 假设一个数字吧，好讨论
         # 假设 acc = 8
@@ -147,8 +148,8 @@ class BasicGPTTrainer:
             # only when model is DDP, there is a no_sync context manager
             # so, my basic trainer test will fail
 
-            # with no_sync_or_null:
-            with self.model.no_sync():  # type: ignore
+            with no_sync_or_null():
+                # with self.model.no_sync():  # type: ignore
                 loss = self.calculate_loss(inputs_sub, labels_sub)
                 losses[i] = loss.detach()
                 # Scales loss. Calls ``backward()`` on scaled loss to create scaled gradients.
