@@ -178,7 +178,10 @@ def get_dataset_size(path: str, name: str | None, split: str = "train") -> float
 
 
 def get_dataset_features(
-    path: str, name: str | None, split: str = "train"
+    path: str,
+    name: str | None,
+    split: str = "train",
+    streaming: bool = True,  # noqa: FBT001, FBT002
 ) -> list[str]:
     # builder = load_dataset_builder(path=path, name=name)
     # info: DatasetInfo = builder.info
@@ -187,12 +190,19 @@ def get_dataset_features(
     # return list(info.features.keys())
     # 而且不管有没有用streaming 这个方法都可以正确的获得features
     # 卧槽，还得是我呀，哈哈哈！
-    ds = load_dataset(path=path, name=name, split=split, streaming=True)
-    example = next(iter(ds))
-    if not isinstance(example, dict):
-        msg = "Example is not a dictionary."
-        raise TypeError(msg)
-    return list(example.keys())
+    ds = load_dataset(path=path, name=name, split=split, streaming=streaming)
+    match ds:
+        case Dataset():
+            return list(ds.features.keys())
+        case IterableDataset():
+            example = next(iter(ds))
+            if not isinstance(example, dict):
+                msg = "Example is not a dictionary."
+                raise TypeError(msg)
+            return list(example.keys())
+        case _:
+            msg = f"Unsupported dataset type: {type(ds)}"
+            raise TypeError(msg)
 
 
 # 不对哎，这个函数没法考虑split这个参数的影响。。。
