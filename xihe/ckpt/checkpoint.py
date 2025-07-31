@@ -299,7 +299,7 @@ class CheckpointManager:
 
         # 哎！我好像知道问题了，这个best loss每个进程都是需要更新的！
         # self.best_loss = checkpoint.get_loss()
-        self.update_best_loss(self.best_loss)
+        self.update_best_loss(checkpoint.get_loss())
         # filename = self.ckpt_dir / "ckpt_best.tar"
         filename = ckpt_defs.get_best_ckpt_path(
             project_dir=self.ckpt_dir, step=checkpoint.get_step()
