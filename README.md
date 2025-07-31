@@ -46,7 +46,7 @@ My LLM.
    2. [x] 实现梯度累积 gradient accumulation steps
    3. [x] 开始模型分布式训练！<https://docs.pytorch.org/tutorials/intermediate/ddp_series_minGPT.html> 又找到一个代码参考源，不过这个也是咱们写完之后对答案用吧
 9. 2025/7/31
-   1. [ ] 添加数据处理速度的测试
+   1. [x] 添加数据处理速度的测试
    2. [x] 统一setting里面的batch size
    3. [x] 数据处理阶段的map的batch size最好也可以设置
    4. [x] 添加日志模块，每个进程独立输出到自己的日志文件，我好方便调试，判断程序是不是正确运行。在重构的过程中逐渐的添加日志吧。

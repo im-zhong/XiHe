@@ -548,11 +548,3 @@ def test_packing_dataset() -> None:
         print(
             f"Decoded Batch {idx}: {[tokenizer.decode(ids, skip_special_tokens=True) for ids in batch['input_ids']]}"
         )
-
-
-# TODO: 还可以测试一个东西啊
-# 就是我们使用流式处理数据的速度
-# 还有模型能够吃的token的速度
-# 还有本地读取文件处理数据的速度
-# 这些都应该测试一下
-# 那咱们就可以把所有数据集的定义放到global变量里面，因为也有很多地方都在使用了
