@@ -211,3 +211,5 @@ wandb/
 
 # Node modules
 node_modules/
+
+wiki_dataset

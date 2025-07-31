@@ -275,6 +275,11 @@ class CheckpointManager:
         # 在这里处理删除多余checkpoint的逻辑
         self.delete_old_checkpoints(step=step, ckpt_dir=self.ckpt_dir)
 
+    def update_best_loss(self, loss: float) -> None:
+        # 更新best loss
+        # 这个函数是为了在训练过程中更新best loss的
+        self.best_loss = min(self.best_loss, loss)
+
     # 我怎么知道best loss呢？
     # 所以checkpoint里面还需要保存loss 。。。
     def save_best_checkpoint(self, checkpoint: Checkpoint) -> None:
@@ -292,7 +297,9 @@ class CheckpointManager:
         if checkpoint.get_loss() > self.best_loss:
             return
 
-        self.best_loss = checkpoint.get_loss()
+        # 哎！我好像知道问题了，这个best loss每个进程都是需要更新的！
+        # self.best_loss = checkpoint.get_loss()
+        self.update_best_loss(self.best_loss)
         # filename = self.ckpt_dir / "ckpt_best.tar"
         filename = ckpt_defs.get_best_ckpt_path(
             project_dir=self.ckpt_dir, step=checkpoint.get_step()

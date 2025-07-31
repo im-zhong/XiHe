@@ -270,6 +270,8 @@ def create_dataset(
         name=name,
         split=split,
         streaming=streaming,
+        cache_dir="/data2/huggingface/datasets",
+        num_proc=8,
     )
 
     if not streaming:
@@ -295,12 +297,14 @@ def create_dataset(
     # 而且通过dataset loader也不一定能够获取
     # 获取的最稳定的，最正确的办法，就是iter一下，拿到example
     # 看看所有的features
-    features = get_dataset_features(path, name, split)
+    # TODO: create dataset根据streaming模式判断怎么获取features name
+    # features = get_dataset_features(path, name, split)
     return dataset.map(
         function=dataset_infos[DatasetEnum(path)].preprocess_fn,
         batched=True,
         batch_size=4096,
         # TODO: when debugging, do not use multiprocessing
         # num_proc=self.num_procs,  # 使用多核处理
-        remove_columns=features,
+        remove_columns=dataset.column_names,
+        # remove_columns=features,
     )

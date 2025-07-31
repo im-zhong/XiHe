@@ -217,6 +217,10 @@ class DistributedGPTTrainer:
         )
 
         start_step = ckpt.get_step() if ckpt else -1
+
+        # 要不在这里加一个barrier吧
+        # dist.barrier()
+
         # Start training
         self.train_loop(
             start_step=start_step + 1,
@@ -390,6 +394,11 @@ class DistributedGPTTrainer:
                         gathered_dataloader_state=dataloader_state,
                         num_tokens=total_num_tokens,
                     )
+
+            # FIX BUG:
+            # each process need to update the best loss
+            # 而且必须在判断need_save之后
+            self.ckpt_mgr.update_best_loss(loss=average_loss)
 
             # TODO：
             # 消耗的token数很好统计

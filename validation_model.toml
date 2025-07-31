@@ -4,44 +4,44 @@
 # streaming = false
 batch_size = 16 # TODO: 这个batch size根本就没有用到过
 
-[[dataloader.datasets]]
-path = "allenai/c4"
-name = "en"
-split = "train"
-streaming = true
-num_epochs = 1
+# [[dataloader.datasets]]
+# path = "allenai/c4"
+# name = "en"
+# split = "train"
+# streaming = false
+# num_epochs = 1
 
-[[dataloader.datasets]]
-path = "wikimedia/wikipedia"
-name = "20231101.en"
-split = "train"
-streaming = true
-num_epochs = 2
+# [[dataloader.datasets]]
+# path = "wikimedia/wikipedia"
+# name = "20231101.en"
+# split = "train"
+# streaming = false
+# num_epochs = 2
 
 [[dataloader.datasets]]
 path = "nampdn-ai/tiny-codes"
 split = "train"
-streaming = true
+streaming = false
 num_epochs = 2
 
-[[dataloader.datasets]]
-path = "eminorhan/gutenberg_en"
-name = "chunk_size_1024"
-split = "train"
-streaming = true
-num_epochs = 2
+# [[dataloader.datasets]]
+# path = "eminorhan/gutenberg_en"
+# name = "chunk_size_1024"
+# split = "train"
+# streaming = false
+# num_epochs = 2
 
 [[dataloader.datasets]]
 path = "donfu/oa-stackexchange"
 split = "train"
-streaming = true
+streaming = false
 num_epochs = 1
 
-[[dataloader.datasets]]
-path = "common-pile/arxiv_papers"
-split = "train"
-streaming = true
-num_epochs = 1
+# [[dataloader.datasets]]
+# path = "common-pile/arxiv_papers"
+# split = "train"
+# streaming = false
+# num_epochs = 1
 
 [tokenizer]
 # tokenizer_file = "gpt2"
