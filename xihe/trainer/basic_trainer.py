@@ -12,7 +12,7 @@ from torch.nn.parallel import DistributedDataParallel
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LambdaLR
 
-from wandb.sdk.wandb_run import Run
+# from wandb.sdk.wandb_run import Run
 from xihe.model import Transformer
 
 
@@ -33,7 +33,7 @@ class BasicGPTTrainer:
         # rank: int,
         # world_size: int,
         max_norm: float = 1.0,
-        run: Run | None = None,
+        # run: Run | None = None,
         device: str = "cuda",
         # dtype: str = "float32", 我觉得先不用这个参数吧
         # 其实混合精度的原理我还不理解
@@ -54,7 +54,7 @@ class BasicGPTTrainer:
         self.scheduler = scheduler
         # self.dataloader = dataloader
         self.device = device
-        self.run = run
+        # self.run = run
         self.max_norm = max_norm
         self.grad_scaler = grad_scaler
         # self.rank = rank

@@ -31,7 +31,6 @@ from xihe.optimizer import (
 )
 from xihe.settings import Config
 from xihe.tokenizer import create_tokenizer
-from xihe.utils.wandb import init_wandb_run
 
 from .basic_trainer import BasicGPTTrainer
 
@@ -41,6 +40,9 @@ from .basic_trainer import BasicGPTTrainer
 # 还有所有需要用的实例
 # TODO: 最关键的问题是怎么协调train from scratch和train from checkpoint
 #
+# wandb有两个可以创建的地方，一个是在外部创建传进来
+# 另一个就是在trainer内部创建
+# 从单一职责的角度来看，应该是由外部传入比较合适，这样也方便测试
 class DistributedGPTTrainer:
     def __init__(
         self,
@@ -132,7 +134,9 @@ class DistributedGPTTrainer:
         # 不对，其实wandb有智能检测的，只有是一个存在过的id
         # 你再次初始化wandb 其实也是resume
         # 所以没必要整两套逻辑
-        run: Run = init_wandb_run(config=config)
+        # run: Run | None = None
+        # if config.wandb.enable and self.rank == 0:
+        #     run = init_wandb_run(config=config)
 
         # get tokenizer from tokenizer configs
         # 但是我们不能直接依赖TokenizerConfig这个类
@@ -212,7 +216,7 @@ class DistributedGPTTrainer:
             # dataloader=dataloader,
             device=config.trainer.device,
             # dtype=config.model.dtype,
-            run=run,
+            # run=run,
             accumulation_gradient_steps=config.trainer.gradient_accumulation_steps,
         )
 

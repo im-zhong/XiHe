@@ -42,6 +42,10 @@ class WandbConfig(BaseModel):
     entity: str | None = Field(None)
     project: str = Field(...)
     id: str = Field(...)
+    enable: bool = Field(
+        default=True,
+        description="Whether to enable Weights & Biases logging.",
+    )
 
 
 # 这个要改, 咱们要支持streaming模式，而且默认最终一定会用iterable dataset

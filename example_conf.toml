@@ -60,6 +60,7 @@ max_grad_norm = 1.0
 entity = "im-zhong-org"
 project = "myllm-pretrain-test"
 id = "a2ab6ca6-6964-42bc-8710-271c8d48f502"
+enable = true
 
 
 [checkpoint]

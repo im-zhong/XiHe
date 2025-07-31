@@ -44,16 +44,16 @@ My LLM.
 8. 2025/7/29
    1. [x] 优化模型实现，包括RMSNOrm，RoPE，以及我们其他模块的实现，改变一下风格，看看是否对显存和速度有影响
    2. [x] 实现梯度累积 gradient accumulation steps
-   3. [ ] 开始模型分布式训练！<https://docs.pytorch.org/tutorials/intermediate/ddp_series_minGPT.html> 又找到一个代码参考源，不过这个也是咱们写完之后对答案用吧
+   3. [x] 开始模型分布式训练！<https://docs.pytorch.org/tutorials/intermediate/ddp_series_minGPT.html> 又找到一个代码参考源，不过这个也是咱们写完之后对答案用吧
 9. 2025/7/31
    1. [ ] 添加数据处理速度的测试
    2. [ ] 统一setting里面的batch size
    3. [ ] 数据处理阶段的map的batch size最好也可以设置
    4. [ ] 添加日志模块，每个进程独立输出到自己的日志文件，我好方便调试，判断程序是不是正确运行
    5. [ ] 现在为了方便，trainer no_sync部分的代码通不过pyright，要想个办法改正过来
-   6. [ ] 现在每个进程都会登陆wandb，应该改成只有rank0需要登陆
-   7. [ ] 启动光是加载数据就加载好久啊。。。不行啊，联网读取数据实在是不靠谱，还是在本地启用streaming模式是最好的。
+   6. [x] 现在每个进程都会登陆wandb，应该改成只有rank0需要登陆
+   7. [x] 启动光是加载数据就加载好久啊。。。不行啊，联网读取数据实在是不靠谱，还是在本地启用streaming模式是最好的。
    8. [ ] create dataset根据streaming模式判断怎么获取features name
-   9. [ ] 查清并解决从本地加载数据集非常慢的问题，而且每个进程都会加载一次也太奇怪了，chatgpt说可以先加载然后dataset.save_to_disk，然后load_from_disk咱们可以试一下。而且好像显示指定了cache_dir加载也快了一些了。
-   10. [ ] 为什么wandb会登陆四次呢？应该只在rank=0上处理任何与wandb有关的逻辑才对
+   9. [x] 查清并解决从本地加载数据集非常慢的问题，而且每个进程都会加载一次也太奇怪了，chatgpt说可以先加载然后dataset.save_to_disk，然后load_from_disk咱们可以试一下。而且好像显示指定了cache_dir加载也快了一些了。第一次加载之后，之后再加载会稍快一些，但是还是很慢。
+   10. [x] 为什么wandb会登陆四次呢？应该只在rank=0上处理任何与wandb有关的逻辑才对
    11. [ ] dataset处理数据的batch size太小了，导致每个step都需要读取数据进行处理，咱们把batch size搞大一点

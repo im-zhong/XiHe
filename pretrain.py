@@ -12,17 +12,26 @@ from pathlib import Path
 import torch
 from torch.multiprocessing.spawn import spawn
 
+from wandb.sdk.wandb_run import Run
 from xihe.ckpt import Checkpoint, load_ckpt_from_path
 from xihe.settings import Config, load_config
 from xihe.trainer import DistributedGPTTrainer
+from xihe.utils.wandb import init_wandb_run
 
 
 # 这样整体上好一些
 def train_from_scratch(rank: int, world_size: int, config: Config) -> None:
+    # 在这里创建wandb吧
+    # TODO: maybe add a config option to disable wandb
+    run: Run | None = None
+    if rank == 0:
+        run = init_wandb_run(config=config)
+
     trainer = DistributedGPTTrainer(
         rank=rank,
         world_size=world_size,
         config=config,
+        run=run,
     )
     trainer.train(config)
 
@@ -32,10 +41,15 @@ def train_from_checkpoint(
     world_size: int,
     checkpoint: Checkpoint,
 ) -> None:
+    run: Run | None = None
+    if rank == 0:
+        run = init_wandb_run(config=checkpoint.get_config())
+
     trainer = DistributedGPTTrainer(
         rank=rank,
         world_size=world_size,
         config=checkpoint.get_config(),
+        run=run,
     )
     trainer.train(config, ckpt=checkpoint)
 
