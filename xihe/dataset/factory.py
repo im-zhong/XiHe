@@ -15,9 +15,11 @@ def create_dataloader(  # noqa: PLR0913
     tokenizer: PreTrainedTokenizer,
     rank: int,
     batch_size: int,
+    map_batch_size: int,
     context_length: int,
     world_size: int,
     datasets_args: list[DatasetArgs],
+    seed: int,
     sampling_probabilities: list[float] | None = None,
 ) -> StatefulDataLoader:
     datasets = [
@@ -25,6 +27,7 @@ def create_dataloader(  # noqa: PLR0913
             path=dataset.path,
             name=dataset.name,
             split=dataset.split,
+            map_batch_size=map_batch_size,
             streaming=dataset.streaming,
             num_shards=world_size,
         )
@@ -48,6 +51,8 @@ def create_dataloader(  # noqa: PLR0913
         datasets=datasets,
         tokenizer=tokenizer,
         sampling_probabilities=sampling_probabilities,
+        seed=seed,
+        map_batch_size=map_batch_size,
     )
     return dataset.to_stateful_dataloader(
         batch_size=batch_size,

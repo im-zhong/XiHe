@@ -26,8 +26,12 @@ class PackingDataset:
         datasets: list[IterableDataset],
         tokenizer: PreTrainedTokenizer,
         sampling_probabilities: list[float],
+        seed: int,
+        map_batch_size: int,
         # shuffle=True,
     ) -> None:
+        self.seed = seed
+        self.map_batch_size = map_batch_size
         # self.dataset_configs = dataset_configs
         self.datasets = datasets
         self.sampling_probabilities = sampling_probabilities
@@ -106,13 +110,16 @@ class PackingDataset:
             probabilities=self.sampling_probabilities,
             # TODO: 这个种子是必须设置的
             # 否则我们checkpoint之后，拿到的数据可能会不一样
-            seed=42,  # 设置随机种子以确保可重复性
+            seed=self.seed,  # 设置随机种子以确保可重复性
             stopping_strategy="all_exhausted",  # 当所有数据集都被耗尽时停止
         )
 
     def get_tokenized_dataset(self) -> IterableDataset:
         return self.get_interleaved_dataset().map(
-            function=self.tokenize, batched=True, remove_columns=["text"]
+            function=self.tokenize,
+            batched=True,
+            batch_size=self.map_batch_size,
+            remove_columns=["text"],
         )
 
     def get_packed_dataset(self, context_length: int) -> IterableDataset:
@@ -120,6 +127,7 @@ class PackingDataset:
         packed_dataset = tokenized_dataset.map(
             self.pack,
             batched=True,
+            batch_size=self.map_batch_size,
             remove_columns=["input_ids", "attention_mask"],
             # https://huggingface.co/docs/datasets/v4.0.0/en/package_reference/main_classes#datasets.Dataset.map.fn_kwargs
             fn_kwargs={"context_length": context_length},
@@ -169,12 +177,16 @@ class PackingDataset:
         )
 
         tokenized_dataset = interleaved_dataset.map(
-            self.tokenize, batched=True, remove_columns=["text"]
+            self.tokenize,
+            batched=True,
+            batch_size=self.map_batch_size,
+            remove_columns=["text"],
         )
 
         packed_dataset = tokenized_dataset.map(
             self.pack,
             batched=True,
+            batch_size=self.map_batch_size,
             remove_columns=["input_ids", "attention_mask"],
             # https://huggingface.co/docs/datasets/v4.0.0/en/package_reference/main_classes#datasets.Dataset.map.fn_kwargs
             fn_kwargs={"context_length": context_length},
@@ -190,18 +202,22 @@ class PackingDataset:
         interleaved_dataset = interleave_datasets(
             datasets=self.datasets,  # type: ignore
             probabilities=self.sampling_probabilities,
-            seed=42,  # 设置随机种子以确保可重复性
+            seed=self.seed,  # 设置随机种子以确保可重复性
             stopping_strategy="all_exhausted",  # 当所有数据集都被耗尽时停止
         )
 
         # batched ！？
         tokenized_dataset = interleaved_dataset.map(
-            self.tokenize, batched=True, remove_columns=["text"]
+            self.tokenize,
+            batched=True,
+            batch_size=self.map_batch_size,
+            remove_columns=["text"],
         )
 
         packed_dataset = tokenized_dataset.map(
             self.pack,
             batched=True,
+            batch_size=self.map_batch_size,
             remove_columns=["input_ids", "attention_mask"],
             # https://huggingface.co/docs/datasets/v4.0.0/en/package_reference/main_classes#datasets.Dataset.map.fn_kwargs
             fn_kwargs={"context_length": context_length},

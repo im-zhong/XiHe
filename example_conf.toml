@@ -2,7 +2,10 @@
 sampling_probabilities = [0.5, 0.5]
 # 先不管这些设置了，等基础的代码可以跑起来在说吧
 # streaming = false
-batch_size = 8
+# 感觉用这个batch_size作为mapping batch size就行啊
+# 换一个名字更合适
+map_batch_size = 8192
+seed = 42
 
 [[dataloader.datasets]]
 path = "allenai/c4"

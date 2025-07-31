@@ -32,8 +32,10 @@ def test_create_dataloader() -> None:
         tokenizer=tokenizer,
         rank=0,
         batch_size=4,
+        map_batch_size=1024,
         context_length=512,
         world_size=4,
+        seed=42,
         datasets_args=datasets_args,
         sampling_probabilities=[0.5, 0.5],  # Example sampling probabilities
     )

@@ -36,6 +36,7 @@ def test_create_dataset() -> None:
         # 不如就不测试带slice的了
         # split="train[:1024]",
         split="train",
+        map_batch_size=1024,
         streaming=True,
     )
     print(dataset)
@@ -192,7 +193,7 @@ def test_dataset_preprocessing() -> None:
     # }
 
     for ds in get_datasets():
-        dataset = create_dataset(**ds)
+        dataset = create_dataset(**ds, map_batch_size=1024)
         print(f"Dataset: {dataset}")
         example: dict[str, Any] = next(iter(dataset))
         # 每个数据集在处理完成之后，都应该只有text这一列
@@ -287,13 +288,18 @@ def test_distributed_sampler() -> None:
         # "num_epochs": 1,
     }
 
+    map_batch_size = 1024
+    seed = 42
+
     packing_dataset = PackingDataset(
         datasets=[
-            create_dataset(**wikipedia),
-            create_dataset(**c4),
+            create_dataset(**wikipedia, map_batch_size=map_batch_size),
+            create_dataset(**c4, map_batch_size=map_batch_size),
         ],
         tokenizer=AutoTokenizer.from_pretrained("gpt2"),
         sampling_probabilities=[0.5, 0.5],
+        map_batch_size=1024,
+        seed=seed,
     )
     dataset = packing_dataset.to_torch_dataset(
         # batch_size=8,
@@ -437,10 +443,14 @@ def test_packing_dataset() -> None:
     ).to_iterable_dataset(num_shards=4)
 
     tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    map_batch_size = 1024
+    seed = 42
     packing_dataset = PackingDataset(
         datasets=[ds_a, ds_b, ds_c],
         tokenizer=tokenizer,
         sampling_probabilities=[0.5, 0.3, 0.2],
+        map_batch_size=map_batch_size,
+        seed=seed,
     )
 
     early_stop_idx = 5

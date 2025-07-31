@@ -148,6 +148,8 @@ class DistributedGPTTrainer:
             rank=self.rank,
             world_size=world_size,
             batch_size=config.trainer.batch_size,
+            map_batch_size=config.dataloader.map_batch_size,
+            seed=config.dataloader.seed,
             context_length=config.model.context_length,
             # TODO: 合并DatasetArgs和DatasetConfig
             datasets_args=config.dataloader.datasets,

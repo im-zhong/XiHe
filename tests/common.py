@@ -115,7 +115,7 @@ def generate_testing_config() -> Config:
             id="a2ab6ca6-6964-42bc-8710-271c8d48f502",
         ),
         dataloader=DataLoaderConfig(
-            batch_size=8,
+            map_batch_size=1024,
             sampling_probabilities=[0.5, 0.5],
             datasets=[
                 DatasetArgs(

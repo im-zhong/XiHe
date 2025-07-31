@@ -67,7 +67,7 @@ class WandbConfig(BaseModel):
 
 
 class DataLoaderConfig(BaseModel):
-    batch_size: int = Field(..., description="Batch size for the DataLoader.")
+    map_batch_size: int = Field(..., description="Batch size for the DataLoader.")
     sampling_probabilities: list[float] | None = Field(
         None,
         description="Sampling probabilities for datasets. If None, will be calculated based on dataset sizes.",
@@ -75,6 +75,10 @@ class DataLoaderConfig(BaseModel):
     datasets: list[DatasetArgs] = Field(
         ...,
         description="List of datasets to be used in the DataLoader.",
+    )
+    seed: int = Field(
+        default=42,
+        description="Random seed for reproducibility.",
     )
 
 

@@ -251,10 +251,11 @@ def calculate_sampling_probabilities(
 # 可以先实现一个简单的函数
 # 根据一个DatasetConfig返回一个Dataset
 # tips: 当streaming为True是，num_shards参数无效
-def create_dataset(
+def create_dataset(  # noqa: PLR0913
     path: str,
-    name: str,
+    name: str | None,
     split: str,
+    map_batch_size: int,
     streaming: bool = True,  # noqa: FBT001, FBT002
     num_shards: int = 1,
 ) -> IterableDataset:
@@ -270,8 +271,10 @@ def create_dataset(
         name=name,
         split=split,
         streaming=streaming,
-        cache_dir="/data2/huggingface/datasets",
-        num_proc=8,
+        # # 这两个应该是可以注释掉的，因为设置了HF_HOME环境变量, 现在默认的cache目录就是这个
+        # cache_dir="/data2/huggingface/datasets",
+        # # 还有就是设置了这个num_proc也没用，在不使用streaming的时候
+        # num_proc=8,
     )
 
     if not streaming:
@@ -302,7 +305,7 @@ def create_dataset(
     return dataset.map(
         function=dataset_infos[DatasetEnum(path)].preprocess_fn,
         batched=True,
-        batch_size=4096,
+        batch_size=map_batch_size,
         # TODO: when debugging, do not use multiprocessing
         # num_proc=self.num_procs,  # 使用多核处理
         remove_columns=dataset.column_names,

@@ -57,3 +57,4 @@ My LLM.
    9. [x] 查清并解决从本地加载数据集非常慢的问题，而且每个进程都会加载一次也太奇怪了，chatgpt说可以先加载然后dataset.save_to_disk，然后load_from_disk咱们可以试一下。而且好像显示指定了cache_dir加载也快了一些了。第一次加载之后，之后再加载会稍快一些，但是还是很慢。
    10. [x] 为什么wandb会登陆四次呢？应该只在rank=0上处理任何与wandb有关的逻辑才对
    11. [ ] dataset处理数据的batch size太小了，导致每个step都需要读取数据进行处理，咱们把batch size搞大一点
+   12. [ ] PackingDataset有冗余，重构一下
