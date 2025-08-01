@@ -284,7 +284,9 @@ def create_dataset(  # noqa: PLR0913
         # # 这两个应该是可以注释掉的，因为设置了HF_HOME环境变量, 现在默认的cache目录就是这个
         # cache_dir="/data2/huggingface/datasets",
         # # 还有就是设置了这个num_proc也没用，在不使用streaming的时候
-        num_proc=8,
+        # 在使用streaming模式的时候，使用num_proc会报错，反正生成tokens的速度是够的
+        # 还是算了
+        # num_proc=8,
     )
 
     if not streaming:

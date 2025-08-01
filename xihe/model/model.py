@@ -122,8 +122,11 @@ class RotaryPositionalEmbedding(nn.Module):
         # return rotary_matrices
 
         freqs: Tensor = 1.0 / (base_freq ** (2.0 * torch.arange(0, dim // 2) / dim))
+
         pos: Tensor = torch.arange(0, max_seq_len)
+
         theta = torch.outer(pos, freqs)  # shape = (max_seq_len, dim // 2)
+
         cos_theta = torch.cos(theta)
         sin_theta = torch.sin(theta)  # shape = (max_seq_len, dim //
         # 我们在内存上组织成和ploar 函数一样的吧
@@ -254,7 +257,6 @@ class MultiHeadSelfAttention(nn.Module):
         query: Tensor = self.query_proj(input_rensor)
         key: Tensor = self.key_proj(input_rensor)
         value: Tensor = self.value_proj(input_rensor)
-
         # 然后利用view把q, k, v的shape变成
         # batch_size, seq_len, head_dim -> batch_size, seq_len, num_heads, head_dim
         # -> (batch_size, num_heads), seq_len, head_dim
